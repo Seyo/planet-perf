@@ -74,6 +74,8 @@ type FactoryOpts = {
   minH?: number;     // minimum building height
   maxH?: number;     // maximum building height
   underground?: boolean; // draw underground mirror with windows/bridges
+  undergroundDim?: number; // 0–1 haze alpha over the underground mirror only
+  skyGradient?: Array<{ offset: number; color: number }>;
 };
 
 // Front: skyscrapers with glowing 1x1px windows
@@ -314,6 +316,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
     minH       = 40,
     maxH       = 280,
     underground = false,
+    undergroundDim = 0,
   } = opts;
 
   return (i) => {
@@ -459,10 +462,23 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
       }
     }
 
+    root.addChild(bodies.fill({ color: baseColor }));
+    root.addChild(struct.fill({ color: 0x0e1520 }));
+    root.addChild(shopLight.fill({ color: 0xffbb44, alpha: 0.22 }));
+    root.addChild(glows.fill({ color: 0xffffff, alpha: 0.05 }));
+    root.addChild(warm.fill({ color: 0xffee66, alpha: 0.7 }));
+    root.addChild(cool.fill({ color: 0x88ccff, alpha: 0.7 }));
+
     if (underground) {
+      const ugBodies = new Graphics();
+      const ugStruct = new Graphics();
+      const ugGlows  = new Graphics();
+      const ugWarm   = new Graphics();
+      const ugCool   = new Graphics();
+
       // Underground mirror — all buildings reflected below yBase
       for (const { x, w, h } of allBuilt) {
-        bodies.rect(x, yBase, w, h);
+        ugBodies.rect(x, yBase, w, h);
       }
 
       // Underground details: sparse windows + bridges (~5% of topside density)
@@ -472,9 +488,9 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
         for (let wy = yBase + 5; wy <= yBase + h - 9; wy += 3) {
           for (let wx = x + 1; wx <= x + w - 2; wx += 3) {
             if (!chance(ugRng, 0.033)) continue;
-            glows.rect(wx - 1, wy - 1, 3, 3);
-            if (chance(ugRng, 0.6)) warm.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
-            else                    cool.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
+            ugGlows.rect(wx - 1, wy - 1, 3, 3);
+            if (chance(ugRng, 0.6)) ugWarm.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
+            else                    ugCool.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
           }
         }
       }
@@ -498,24 +514,31 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
           }
         }
         if (bx < 0) continue;
-        struct.rect(bx, bridgeY, bw, 1);
+        ugStruct.rect(bx, bridgeY, bw, 1);
         const lightCount = randInt(ugRng, 2, 4);
         for (let l = 0; l < lightCount; l++) {
           if (!chance(ugRng, 0.05)) continue;
           const lx = bx + Math.round((l + 0.5) * (bw / lightCount));
-          glows.rect(lx - 1, bridgeY - 1, 3, 3);
-          if (chance(ugRng, 0.6)) warm.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
-          else                    cool.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
+          ugGlows.rect(lx - 1, bridgeY - 1, 3, 3);
+          if (chance(ugRng, 0.6)) ugWarm.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
+          else                    ugCool.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
         }
       }
-    }
 
-    root.addChild(bodies.fill({ color: baseColor }));
-    root.addChild(struct.fill({ color: 0x0e1520 }));
-    root.addChild(shopLight.fill({ color: 0xffbb44, alpha: 0.22 }));
-    root.addChild(glows.fill({ color: 0xffffff, alpha: 0.05 }));
-    root.addChild(warm.fill({ color: 0xffee66, alpha: 0.7 }));
-    root.addChild(cool.fill({ color: 0x88ccff, alpha: 0.7 }));
+      // Shift body color from dark grey (near, undergroundDim=0) toward black (far, undergroundDim=0.5)
+      const depthT  = undergroundDim * 2; // 0=near → 1=far
+      const ugBodyColor = (Math.round(0x1a * depthT) << 16)
+                        | (Math.round(0x22 * depthT) << 8)
+                        |  Math.round(0x32 * depthT);
+
+      const ugContainer = new Container();
+      ugContainer.addChild(ugBodies.fill({ color: ugBodyColor }));
+      ugContainer.addChild(ugStruct.fill({ color: 0x0e1520 }));
+      ugContainer.addChild(ugGlows.fill({ color: 0xffffff, alpha: 0.05 }));
+      ugContainer.addChild(ugWarm.fill({ color: 0xffee66, alpha: 0.7 }));
+      ugContainer.addChild(ugCool.fill({ color: 0x88ccff, alpha: 0.7 }));
+      root.addChild(ugContainer);
+    }
 
     return root;
   };
@@ -601,14 +624,14 @@ export function makeShallowCaveFactory(opts: FactoryOpts): SliceFactory {
     const root = new Container();
     const rng  = mulberry32(hashSeed(i, salt));
 
-    if (!chance(rng, density)) return root;
-
-    // Cave ceiling fill
+    // Cave background fill — always drawn to prevent gaps
     root.addChild(
       new Graphics()
         .rect(0, ceilingY, sliceWidthPxAtZoom1, floorY - ceilingY)
         .fill({ color: baseColor, alpha: 1 }),
     );
+
+    if (!chance(rng, density)) return root;
 
     // Glowing crystals
     const crystalCount = randInt(rng, 1, 4);
@@ -691,11 +714,18 @@ export function makeDeepCoreFactory(opts: FactoryOpts): SliceFactory {
   };
 }
 
-// Sky: full-height gradient from cyan at top to near-black at the horizon
+const DEFAULT_SKY_GRADIENT: Array<{ offset: number; color: number }> = [
+  { offset: 0,    color: 0x000005 },
+  { offset: 0.87, color: 0x000005 },
+  { offset: 0.95, color: 0x12082a },
+  { offset: 1,    color: 0x3a1255 },
+];
+
+// Sky: full-height gradient from near-black at top to horizon colour at the bottom
 export function makeSkyGradientFactory(opts: FactoryOpts): SliceFactory {
-  const { sliceWidthPxAtZoom1 } = opts;
   const topY    = -4000;
   const bottomY =  155;
+  const stops   = opts.skyGradient ?? DEFAULT_SKY_GRADIENT;
 
   return (_i) => {
     const root = new Container();
@@ -705,17 +735,12 @@ export function makeSkyGradientFactory(opts: FactoryOpts): SliceFactory {
       start: { x: 0, y: 0 },
       end:   { x: 0, y: 1 },
       textureSpace: 'local',
-      colorStops: [
-        { offset: 0,    color: 0x000005 },
-        { offset: 0.87, color: 0x000005 },
-        { offset: 0.95, color: 0x12082a },
-        { offset: 1,    color: 0x3a1255 },
-      ],
+      colorStops: stops,
     });
 
     root.addChild(
       new Graphics()
-        .rect(0, topY, sliceWidthPxAtZoom1, bottomY - topY)
+        .rect(-5000, topY, 10000, bottomY - topY)
         .fill(gradient),
     );
 

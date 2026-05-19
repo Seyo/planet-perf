@@ -1,8 +1,7 @@
-import { Application } from "pixi.js";
+import { Application, type Container, Graphics } from "pixi.js";
 import {
   Planet,
   makeBackCityLayer,
-  makeDeepCoreLayer,
   makeFrontLayer,
   makeGroundLayer,
   makeHazeOverlay,
@@ -11,6 +10,10 @@ import {
   makeSkyLayer,
 } from "./planet/planet";
 import { makeActorLayer } from "./planet/render/actor-layer";
+import { DebugPanel } from "./debug/debug-panel";
+import { PALETTES } from "./debug/palettes";
+import type { Palette } from "./debug/palettes";
+import type { SliceLayer } from "./planet/render/slice-layer";
 
 const app = new Application();
 await app.init({
@@ -19,7 +22,7 @@ await app.init({
   resolution: window.devicePixelRatio,
   autoDensity: true,
   backgroundAlpha: 1,
-  backgroundColor: 0x3a1255,
+  backgroundColor: PALETTES[0].backgroundColor,
 });
 
 document.body.appendChild(app.canvas);
@@ -27,38 +30,96 @@ document.body.appendChild(app.canvas);
 const planet = new Planet(app);
 
 // Back-to-front: first added = furthest back
-planet.addLayer(makeSkyLayer(),      { behindAll: true });
-planet.addLayer(makeDeepCoreLayer(), { behindAll: true });
-planet.addLayer(makeShallowCaveLayer(), { behindAll: true });
+let activeSkyLayer: SliceLayer = makeSkyLayer(PALETTES[0].skyGradient);
+planet.addLayer(activeSkyLayer,          { behindAll: true });
+planet.addLayer(makeShallowCaveLayer(),  { behindAll: true });
+
 // Background city layers — far to near, motionScale stepping by 0.03
 const BACK_LAYER_COUNT  = 45;
 const BACK_SCALE_START  = 0.70;
 const BACK_SCALE_END    = 0.97;
-const ACTOR_LAYER_START = BACK_LAYER_COUNT - 10; // nearest 10 back layers get actor layers
+const ACTOR_LAYER_START = BACK_LAYER_COUNT - 10;
+
+type HazeEntry = { container: Container; alpha: number; underground: boolean };
+const hazeEntries: HazeEntry[] = [];
 
 for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   const t           = BACK_LAYER_COUNT > 1 ? i / (BACK_LAYER_COUNT - 1) : 0;
   const motionScale = BACK_SCALE_START + t * (BACK_SCALE_END - BACK_SCALE_START);
-  const minH        = Math.round(40  + t * 80);      // 40 → 120
-  const maxH        = Math.round(100 + t * 180);     // 100 → 280
-  const salt        = 1000 + i * 97;                 // unique seed stream per layer
+  const minH        = Math.round(40  + t * 80);
+  const maxH        = Math.round(100 + t * 180);
+  const salt        = 1000 + i * 97;
 
+  const isUnderground = i >= BACK_LAYER_COUNT - 10;
+  const ugT = isUnderground ? (i - (BACK_LAYER_COUNT - 10)) / 9 : 0;
   planet.addLayer(
-    makeBackCityLayer({ motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: i >= BACK_LAYER_COUNT - 10 }),
+    makeBackCityLayer({ motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: isUnderground, undergroundDim: isUnderground ? 0.5 * (1 - ugT) : 0 }),
     { behindAll: true },
   );
   if (i >= ACTOR_LAYER_START) {
     planet.addActorLayer(makeActorLayer(motionScale, motionScale));
   }
-  planet.addOverlay(makeHazeOverlay(0.30 - t * 0.24), motionScale);
-  planet.addOverlay(makeUndergroundHazeOverlay(0.30 - t * 0.24), motionScale);
+
+  const hazeAlpha = 0.30 - t * 0.24;
+  const hazeContainer = makeHazeOverlay(hazeAlpha, PALETTES[0].hazeColor);
+  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha, underground: false });
+  planet.addOverlay(hazeContainer, motionScale);
 }
+
+const ugHazeContainer = makeUndergroundHazeOverlay(0.45, PALETTES[0].caveHazeColor);
+hazeEntries.push({ container: ugHazeContainer, alpha: 0.45, underground: true });
+planet.addOverlay(ugHazeContainer, 1.0);
+
 planet.addLayer(makeGroundLayer(),   { behindAll: true });
 planet.addLayer(makeFrontLayer(planet.animators), { asInteractionLayer: true });
-planet.addActorLayer(makeActorLayer(1.0, 1.0)); // front actor layer (no haze above)
+planet.addActorLayer(makeActorLayer(1.0, 1.0));
 
-
+const frontHazeContainer = makeHazeOverlay(0.05, PALETTES[0].hazeColor);
+hazeEntries.push({ container: frontHazeContainer, alpha: 0.05, underground: false });
+planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();
 
-app.ticker.add((ticker) => planet.update(ticker.deltaTime));
+// --- debug panel ---
+
+const debugPanel = new DebugPanel(PALETTES);
+
+// Standalone debug line — lives inside the sky layer so it follows its y-parallax.
+// Re-parented in applyPalette whenever the sky layer is replaced.
+const skyBottomLine = new Graphics().rect(-5000, 154, 10000, 2).fill(0xff0000);
+activeSkyLayer.container.addChild(skyBottomLine);
+debugPanel.registerToggle('sky-bottom', 'Sky bottom edge', skyBottomLine);
+
+function applyPalette(p: Palette): void {
+  app.renderer.background.color = p.backgroundColor;
+
+  const newSky = makeSkyLayer(p.skyGradient);
+  activeSkyLayer.container.removeChild(skyBottomLine);
+  planet.replaceLayer(activeSkyLayer, newSky);
+  activeSkyLayer = newSky;
+  activeSkyLayer.container.addChild(skyBottomLine);
+
+  for (const entry of hazeEntries) {
+    if (entry.underground) {
+      makeUndergroundHazeOverlay(entry.alpha, p.caveHazeColor, entry.container);
+    } else {
+      makeHazeOverlay(entry.alpha, p.hazeColor, -150, 160, entry.container);
+    }
+  }
+}
+
+debugPanel.onPaletteChange = (idx) => applyPalette(PALETTES[idx]);
+
+app.ticker.add((ticker) => {
+  planet.update(ticker.deltaTime);
+  debugPanel.update({
+    xDeg:      planet.xDeg,
+    vDeg:      planet.vDeg,
+    cameraY:   planet.cameraY,
+    vY:        planet.vY,
+    zoom:      planet.zoomLevel,
+    fps:       app.ticker.FPS,
+    viewportW: app.renderer.width,
+    viewportH: app.renderer.height,
+  });
+});

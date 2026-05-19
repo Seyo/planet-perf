@@ -8,7 +8,7 @@ import { SliceRing } from "./render/slice-ring";
 import { makeBackCityFactory, makeDeepCoreFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
 import type { Animator } from "./render/layer-factories";
 
-type WorldState = {
+export type WorldState = {
   xDeg: number;   // continuous, never wrapped
   vDeg: number;   // degrees per tick
   cameraY: number; // px at zoom=1; increases = looking underground
@@ -86,12 +86,31 @@ export class Planet {
     this.root.addChild(container);
   }
 
+  replaceLayer(old: SliceLayer, newLayer: SliceLayer): void {
+    const idx = this.layers.indexOf(old);
+    if (idx === -1) return;
+    const rootIdx = this.root.getChildIndex(old.container);
+    this.root.removeChild(old.container);
+    old.container.destroy({ children: true });
+    this.root.addChildAt(newLayer.container, rootIdx);
+    this.layers[idx] = newLayer;
+    if (this.interactionLayer === old) this.interactionLayer = newLayer;
+  }
+
+  get xDeg():     number { return this.world.xDeg; }
+  get vDeg():     number { return this.world.vDeg; }
+  get cameraY():  number { return this.world.cameraY; }
+  get vY():       number { return this.world.vY; }
+  get zoomLevel():number { return this.zoom.zoom; }
+
   finalize() {
     // Call after adding layers. Ensures zoom bounds computed.
     if (!this.interactionLayer) {
       throw new Error("Planet needs an interaction layer (frontmost ring).");
     }
     this.recomputeZoomAndCenter();
+    // Center the ground line (world Y=150) in the viewport on first load
+    this.world.cameraY = this.clampCameraY(150 - this.app.renderer.height / (2 * this.zoom.zoom));
   }
 
   update(dt: number) {
@@ -125,7 +144,7 @@ export class Planet {
 
       // Drag up → reveal underground (drag up = deltaPy negative = cameraY increases)
       const deltaPy = this.pointer.y - this.dragStartPointerY;
-      this.world.cameraY = this.dragStartCameraY - deltaPy;
+      this.world.cameraY = this.clampCameraY(this.dragStartCameraY - deltaPy);
 
       if (INERTIA_ENABLED) {
         this.world.vDeg =
@@ -143,9 +162,18 @@ export class Planet {
         this.world.xDeg = this.world.xDeg - this.world.vDeg * dt;
 
         this.world.vY *= INERTIA_FRICTION;
-        this.world.cameraY = this.world.cameraY - this.world.vY * dt;
+        const rawY = this.world.cameraY - this.world.vY * dt;
+        const clampedY = this.clampCameraY(rawY);
+        if (clampedY !== rawY) this.world.vY = 0;
+        this.world.cameraY = clampedY;
       }
     }
+  }
+
+  private clampCameraY(y: number): number {
+    const min = -4000 / 0.55;
+    const max = (2210 - this.app.renderer.height / this.zoom.zoom) / 0.93;
+    return Math.max(min, Math.min(max, y));
   }
 
   private layout() {
@@ -223,31 +251,33 @@ export function makeFrontLayer(animators?: Animator[]) {
 }
 
 type BackCityConfig = {
-  motionScale?:  number;
-  yMotionScale?: number;
-  baseColor?:    number;
-  density?:      number;
-  minH?:         number;
-  maxH?:         number;
-  salt?:         number;
-  underground?:  boolean;
+  motionScale?:   number;
+  yMotionScale?:  number;
+  baseColor?:     number;
+  density?:       number;
+  minH?:          number;
+  maxH?:          number;
+  salt?:          number;
+  underground?:   boolean;
+  undergroundDim?: number;
 };
 
 export function makeBackCityLayer(config: BackCityConfig = {}) {
   const {
-    motionScale  = 0.97,
-    yMotionScale = 0.97,
-    baseColor    = 0x060810,
-    density      = 0.85,
-    minH         = 40,
-    maxH         = 280,
-    salt         = 202,
-    underground  = false,
+    motionScale    = 0.97,
+    yMotionScale   = 0.97,
+    baseColor      = 0x060810,
+    density        = 0.85,
+    minH           = 40,
+    maxH           = 280,
+    salt           = 202,
+    underground    = false,
+    undergroundDim = 0,
   } = config;
 
   const ring = new SliceRing(
     72, 5, 120,
-    makeBackCityFactory({ sliceWidthPxAtZoom1: 120, baseColor, density, minH, maxH, salt, underground }),
+    makeBackCityFactory({ sliceWidthPxAtZoom1: 120, baseColor, density, minH, maxH, salt, underground, undergroundDim }),
   );
   return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
 }
@@ -285,24 +315,26 @@ export function makeDeepCoreLayer() {
   return new SliceLayer(ring, 0.82, 1.0, 0.75);
 }
 
-export function makeSkyLayer() {
+export function makeSkyLayer(skyGradient?: Array<{ offset: number; color: number }>) {
   const skyRing = new SliceRing(
     36,
     10,
     120,
-    makeSkyGradientFactory({ sliceWidthPxAtZoom1: 120 }),
+    makeSkyGradientFactory({ sliceWidthPxAtZoom1: 120, skyGradient }),
   );
-  // yMotionScale=0.15: sky barely drifts vertically — feels very distant
-  return new SliceLayer(skyRing, 0.7, 1.0, 0.40 );
+  // yMotionScale=0.40: sky barely drifts vertically — feels very distant
+  return new SliceLayer(skyRing, 0.7, 1.0, 0.55);
 }
 
 // Single full-width gradient overlay — no slice boundaries, no bleed.
 // Pass to planet.addOverlay() with the same yMotionScale as its city layer.
+// Pass `into` to update an existing container in-place (for palette switching).
 export function makeHazeOverlay(
   hazeAlpha: number,
   color = HAZE_COLOR,
   topY = -150,
   bottomY = 160,
+  into?: Container,
 ): Container {
   const r = (color >> 16) & 0xff;
   const g = (color >> 8)  & 0xff;
@@ -320,7 +352,8 @@ export function makeHazeOverlay(
     ],
   });
 
-  const container = new Container();
+  const container = into ?? new Container();
+  if (into) for (const c of into.removeChildren()) c.destroy();
   container.addChild(
     new Graphics()
       .rect(-5000, topY, 10000, bottomY - topY)
@@ -330,7 +363,8 @@ export function makeHazeOverlay(
 }
 
 // Haze for the underground mirror city — gradient runs top-to-bottom below the ground line.
-export function makeUndergroundHazeOverlay(hazeAlpha: number, color = CAVE_HAZE_COLOR): Container {
+// Pass `into` to update an existing container in-place (for palette switching).
+export function makeUndergroundHazeOverlay(hazeAlpha: number, color = CAVE_HAZE_COLOR, into?: Container): Container {
   const topY    =  148;  // ground surface
   const bottomY = 2000;  // ~5× the original 352px depth
 
@@ -350,7 +384,8 @@ export function makeUndergroundHazeOverlay(hazeAlpha: number, color = CAVE_HAZE_
     ],
   });
 
-  const container = new Container();
+  const container = into ?? new Container();
+  if (into) for (const c of into.removeChildren()) c.destroy();
   container.addChild(
     new Graphics()
       .rect(-5000, topY, 10000, bottomY - topY)

@@ -61,8 +61,9 @@ export class SliceRing {
 
       // Cull in screen space: apply zoom
       const screenX = slice.x * zoom;
+      const sliceScreenW = this.degPerSlice * ppd * zoom;
       slice.visible =
-        screenX > -halfW - cullPadPx && screenX < halfW + cullPadPx;
+        screenX + sliceScreenW > -halfW - cullPadPx && screenX < halfW + cullPadPx;
     }
   }
 }
