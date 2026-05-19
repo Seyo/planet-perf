@@ -112,6 +112,6 @@ export class ActorLayer {
 }
 
 export function makeActorLayer(motionScale: number, yMotionScale: number): ActorLayer {
-  const carCount = 50 + Math.floor(Math.random() * 51); // 50–100
+  const carCount = 100 + Math.floor(Math.random() * 101); // 50–100
   return new ActorLayer(motionScale, yMotionScale, carCount);
 }

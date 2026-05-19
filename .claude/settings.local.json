@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\emiln\\\\code\\\\planet-perf\" -Force)",
+      "Bash(Select-Object -Property Mode, Name)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\emiln\\\\code\\\\planet-perf\\\\src\" -Recurse -Name)",
+      "Bash(Get-ChildItem *)",
+      "Bash(Select-Object Name)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(Select-Object -First 5)"
+    ]
+  }
+}
