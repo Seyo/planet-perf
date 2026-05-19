@@ -98,7 +98,7 @@ debugPanel.setActivePalette(DEFAULT_PALETTE_IDX);
 
 // Standalone debug line — lives inside the sky layer so it follows its y-parallax.
 // Re-parented in applyPalette whenever the sky layer is replaced.
-const skyBottomLine = new Graphics().rect(-5000, 154, 10000, 2).fill(0xff0000);
+const skyBottomLine = new Graphics().rect(-5000, 4, 10000, 2).fill(0xff0000);
 activeSkyLayer.container.addChild(skyBottomLine);
 debugPanel.registerToggle('sky-bottom',  'Sky bottom edge', skyBottomLine);
 debugPanel.registerToggle('slice-lines', 'Slice lines',     sliceOverlay.container);
@@ -117,7 +117,7 @@ function applyPalette(p: Palette): void {
     if (entry.underground) {
       makeUndergroundHazeOverlay(entry.alpha, p.caveHazeColor, entry.container);
     } else {
-      makeHazeOverlay(entry.alpha, p.hazeColor, -150, 160, entry.container);
+      makeHazeOverlay(entry.alpha, p.hazeColor, -300, 10, entry.container);
     }
   }
 }

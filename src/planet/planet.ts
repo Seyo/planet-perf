@@ -109,8 +109,8 @@ export class Planet {
       throw new Error("Planet needs an interaction layer (frontmost ring).");
     }
     this.recomputeZoomAndCenter();
-    // Center the ground line (world Y=150) in the viewport on first load
-    this.world.cameraY = this.clampCameraY(150 - this.app.renderer.height / (2 * this.zoom.zoom));
+    // Center the ground line (world Y=0) in the viewport on first load
+    this.world.cameraY = this.clampCameraY(-this.app.renderer.height / (2 * this.zoom.zoom));
   }
 
   update(dt: number) {
@@ -171,8 +171,8 @@ export class Planet {
   }
 
   private clampCameraY(y: number): number {
-    const min = -4000 / 0.55;
-    const max = (2210 - this.app.renderer.height / this.zoom.zoom) / 0.93;
+    const min = -4150 / 0.55;
+    const max = (2060 - this.app.renderer.height / this.zoom.zoom) / 0.93;
     return Math.max(min, Math.min(max, y));
   }
 
@@ -242,7 +242,9 @@ export class Planet {
   }
 
   private installResize() {
-    window.addEventListener("resize", () => this.recomputeZoomAndCenter());
+    window.addEventListener("resize", () => {
+      requestAnimationFrame(() => this.recomputeZoomAndCenter());
+    });
   }
 }
 
@@ -344,8 +346,8 @@ export function makeSkyLayer(skyGradient?: Array<{ offset: number; color: number
 export function makeHazeOverlay(
   hazeAlpha: number,
   color = HAZE_COLOR,
-  topY = -150,
-  bottomY = 160,
+  topY = -300,
+  bottomY = 10,
   into?: Container,
 ): Container {
   const r = (color >> 16) & 0xff;
@@ -377,8 +379,8 @@ export function makeHazeOverlay(
 // Haze for the underground mirror city — gradient runs top-to-bottom below the ground line.
 // Pass `into` to update an existing container in-place (for palette switching).
 export function makeUndergroundHazeOverlay(hazeAlpha: number, color = CAVE_HAZE_COLOR, into?: Container): Container {
-  const topY    =  148;  // ground surface
-  const bottomY = 2000;  // ~5× the original 352px depth
+  const topY    =   -2;  // ground surface
+  const bottomY = 1850;  // ~5× the original 352px depth
 
   const r = (color >> 16) & 0xff;
   const g = (color >> 8)  & 0xff;

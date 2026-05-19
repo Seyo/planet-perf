@@ -2,8 +2,11 @@ import { Container, Graphics } from "pixi.js";
 import { normalize180 } from "../math";
 
 const BASE_PPD = 24; // 120px / 5deg — matches all building rings
-const Y_MIN = -130;
-const Y_MAX = 430; // surface + mirrored underground city height
+const Y_SKY_MIN       = -130;
+const Y_UG_MAX        =  430;
+const SURFACE_Y       =   -2; // top of dirt — matches surfaceY in makeGroundSectionFactory
+const GROUND_BOTTOM_Y =   62; // bottom of dirt — matches bottomY in makeGroundSectionFactory
+const ABOVE_FRACTION  = 0.70; // 70% of cars above ground
 const DEST_DEG_SPREAD = 25; // max ±deg for next destination
 const ARRIVAL_THRESHOLD = 3; // px world-space
 
@@ -29,11 +32,18 @@ class Car {
   destDeg: number;
   destY: number;
   readonly gfx: Container;
+  readonly zone: 'above' | 'below';
   private speed: number;
+  private dirSign = 1; // +1 = rightward (increasing deg), -1 = leftward
+  onScreen = false;    // set each frame by ActorLayer.layout()
 
   constructor() {
+    this.zone    = Math.random() < ABOVE_FRACTION ? 'above' : 'below';
+    const [yMin, yMax] = this.zone === 'above'
+      ? [Y_SKY_MIN, SURFACE_Y]
+      : [GROUND_BOTTOM_Y, Y_UG_MAX];
     this.deg     = Math.random() * 360;
-    this.y       = Y_MIN + Math.random() * (Y_MAX - Y_MIN);
+    this.y       = yMin + Math.random() * (yMax - yMin);
     this.destDeg = this.deg;
     this.destY   = this.y;
     this.speed   = 0.25 + Math.random() * 0.35;
@@ -45,10 +55,20 @@ class Car {
   }
 
   private pickNewDest() {
-    const spread = (Math.random() * 2 - 1) * DEST_DEG_SPREAD;
+    // Only allow horizontal reversal when off-screen
+    let spread = (Math.random() * 2 - 1) * DEST_DEG_SPREAD;
+    if (this.onScreen && spread !== 0 && Math.sign(spread) !== this.dirSign) {
+      spread = -spread;
+    }
     this.destDeg = ((this.deg + spread) % 360 + 360) % 360;
-    const yDrift = (Math.random() * 2 - 1) * 40; // ±40px vertical drift per leg
-    this.destY   = Math.max(Y_MIN, Math.min(Y_MAX, this.y + yDrift));
+
+    // Vertical drift clamped to zone — never enter dirt
+    const [yMin, yMax] = this.zone === 'above'
+      ? [Y_SKY_MIN, SURFACE_Y]
+      : [GROUND_BOTTOM_Y, Y_UG_MAX];
+    const yDrift = (Math.random() * 2 - 1) * 40;
+    this.destY   = Math.max(yMin, Math.min(yMax, this.y + yDrift));
+
     this.recomputeVelocity();
   }
 
@@ -60,6 +80,7 @@ class Car {
     if (len < 0.01) { this.pickNewDest(); return; }
     this.vDeg = (dxPx / len) * this.speed / BASE_PPD;
     this.vY   = (dyPx / len) * this.speed;
+    if (this.vDeg !== 0) this.dirSign = Math.sign(this.vDeg);
   }
 
   update(dt: number) {
@@ -106,7 +127,8 @@ export class ActorLayer {
       car.gfx.x     = relDeg * this.ppd;
       car.gfx.y     = car.y;
       const screenX = car.gfx.x * zoom;
-      car.gfx.visible = Math.abs(screenX) < halfW + CULL_PAD;
+      car.onScreen        = Math.abs(screenX) < halfW;
+      car.gfx.visible     = Math.abs(screenX) < halfW + CULL_PAD;
     }
   }
 }

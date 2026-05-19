@@ -85,7 +85,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
     baseColor = 0x060810,
     density = 0.68,
     salt = 101,
-    yBase = 150,
+    yBase = 0,
   } = opts;
 
   return (i) => {
@@ -312,7 +312,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
     baseColor  = 0x060810,
     density    = 0.65,
     salt       = 202,
-    yBase      = 150,
+    yBase      = 0,
     minH       = 40,
     maxH       = 280,
     underground = false,
@@ -551,12 +551,12 @@ export function makeGroundSectionFactory(opts: FactoryOpts): SliceFactory {
     salt = 606,
   } = opts;
 
-  // Y zones (surface yBase = 150)
-  const surfaceY  = 148; // top of ground — buildings sit here
-  const soilY     = 163; // top of dark soil layer
-  const subsoilY  = 182; // top of clay/rock layer
-  const stoneY    = 200; // top of stone layer (meets cave at ~210)
-  const bottomY   = 212;
+  // Y zones (surface yBase = 0)
+  const surfaceY  =  -2; // top of ground — buildings sit here
+  const soilY     =  13; // top of dark soil layer
+  const subsoilY  =  32; // top of clay/rock layer
+  const stoneY    =  50; // top of stone layer (meets cave at ~60)
+  const bottomY   =  62;
 
   const pathColor    = 0x060810;
   const soilColor    = 0x2a1e0e;
@@ -616,8 +616,8 @@ export function makeShallowCaveFactory(opts: FactoryOpts): SliceFactory {
     salt = 404,
   } = opts;
 
-  const ceilingY = 210;
-  const floorY   = 2210;
+  const ceilingY =  60;
+  const floorY   = 2060;
   const crystalColor = 0x4fd8e8;
 
   return (i) => {
@@ -660,7 +660,7 @@ export function makeDeepCoreFactory(opts: FactoryOpts): SliceFactory {
     baseColor = 0x2a0800,
     density = 1.0,
     salt = 505,
-    yBase = 2350,
+    yBase = 2200,
   } = opts;
 
   const glowColor = 0xff5500;
@@ -723,8 +723,8 @@ const DEFAULT_SKY_GRADIENT: Array<{ offset: number; color: number }> = [
 
 // Sky: full-height gradient from near-black at top to horizon colour at the bottom
 export function makeSkyGradientFactory(opts: FactoryOpts): SliceFactory {
-  const topY    = -4000;
-  const bottomY =  155;
+  const topY    = -4150;
+  const bottomY =     5;
   const stops   = opts.skyGradient ?? DEFAULT_SKY_GRADIENT;
 
   return (_i) => {
