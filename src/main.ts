@@ -38,7 +38,7 @@ planet.addLayer(activeSkyLayer,          { behindAll: true });
 planet.addLayer(makeShallowCaveLayer(),  { behindAll: true });
 
 // Background city layers — far to near, motionScale stepping by 0.03
-const BACK_LAYER_COUNT  = 45;
+const BACK_LAYER_COUNT  = 35;
 const BACK_SCALE_START  = 0.70;
 const BACK_SCALE_END    = 0.97;
 const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;

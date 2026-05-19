@@ -58,14 +58,8 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
     const built: BuildingRect[] = [];
     const theme: BuildingTheme = { ...FRONT_THEME, baseColor };
 
-    const drawIsolated = (b: BuildingRect, opts: BuildingOpts) => {
-      const c = makeCanvas(3);
-      drawBuilding(c, rng, b, opts);
-      const sub = new Container();
-      commitCanvas(sub, c, theme);
-      if (animators) registerFlickerAnimators(c, rng, animators);
-      root.addChild(sub);
-    };
+    // One shared canvas for all buildings — avoids 7-8 Graphics objects per building.
+    const buildingCanvas = makeCanvas(3);
 
     // Pass 1: low-rise fillers (always present, keeps ground covered)
     const fillerCount = randInt(rng, 3, 5);
@@ -74,7 +68,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
       const h = randInt(rng, 8, 38);
       const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
       built.push(building);
-      drawIsolated(building, {
+      drawBuilding(buildingCanvas, rng, building, {
         yBase,
         windowMinH:     18,
         windowOpts:     { stepX: 4, stepY: 4, padTop: 4, padBottom: 6, density: 0.45 },
@@ -90,7 +84,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
         const h = randInt(rng, 20, 280);
         const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
         built.push(building);
-        drawIsolated(building, {
+        drawBuilding(buildingCanvas, rng, building, {
           yBase,
           windowMinH:       25,
           antennaChance:    0.55,
@@ -98,11 +92,14 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
           landingPadChance: 0.10,
           landingPadMinH:   150,
           diagonalAccentChance: 0.1,
-          chamferChance:0.95,
-          
+          chamferChance: 0.95,
         });
       }
     }
+
+    // Commit all buildings in a single batch, then register flicker animators once.
+    commitCanvas(root, buildingCanvas, theme);
+    if (animators) registerFlickerAnimators(buildingCanvas, rng, animators);
 
     // Slice-level features on a single canvas painted ON TOP of all buildings.
     const sliceCanvas = makeCanvas(0);
@@ -111,9 +108,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
       drawBridge(sliceCanvas, rng, built, yBase, { minHeight: 40, bridgeHeight: 2, endpointGlows: true, lightCount: [3, 6] });
     }
     drawDetailedGreebles(sliceCanvas, rng, randInt(rng, 10, 20), sliceWidthPxAtZoom1, yBase);
-    const sliceContainer = new Container();
-    commitCanvas(sliceContainer, sliceCanvas, theme);
-    root.addChild(sliceContainer);
+    commitCanvas(root, sliceCanvas, theme);
 
     return root;
   };
@@ -140,13 +135,8 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
 
     const built: BuildingRect[] = [];
 
-    const drawIsolated = (b: BuildingRect, opts: BuildingOpts) => {
-      const c = makeCanvas(0);
-      drawBuilding(c, rng, b, opts);
-      const sub = new Container();
-      commitCanvas(sub, c, theme);
-      root.addChild(sub);
-    };
+    // One shared canvas for all buildings — avoids 7-8 Graphics objects per building.
+    const buildingCanvas = makeCanvas(0);
 
     // Pass 1: low-rise fillers
     const fillerCount = randInt(rng, 2, 4);
@@ -159,7 +149,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
         h,
       };
       built.push(building);
-      drawIsolated(building, {
+      drawBuilding(buildingCanvas, rng, building, {
         yBase,
         windowMinH: 8,
         windowOpts: {
@@ -188,7 +178,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
           h,
         };
         built.push(building);
-        drawIsolated(building, {
+        drawBuilding(buildingCanvas, rng, building, {
           yBase,
           windowMinH: 25,
           antennaChance: 0.5,
@@ -201,6 +191,9 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
         });
       }
     }
+
+    // Commit all buildings in a single batch.
+    commitCanvas(root, buildingCanvas, theme);
 
     // Slice-level features on a single canvas painted ON TOP of all buildings.
     const sliceCanvas = makeCanvas(0);
@@ -221,9 +214,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
       sliceWidthPxAtZoom1,
       yBase,
     );
-    const sliceContainer = new Container();
-    commitCanvas(sliceContainer, sliceCanvas, theme);
-    root.addChild(sliceContainer);
+    commitCanvas(root, sliceCanvas, theme);
 
     if (underground) {
       const ugRng = mulberry32(hashSeed(i, salt + 99999));
