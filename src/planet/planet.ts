@@ -144,12 +144,12 @@ export class Planet {
 
       // Drag up → reveal underground (drag up = deltaPy negative = cameraY increases)
       const deltaPy = this.pointer.y - this.dragStartPointerY;
-      this.world.cameraY = this.clampCameraY(this.dragStartCameraY - deltaPy);
+      this.world.cameraY = this.clampCameraY(this.dragStartCameraY - deltaPy / this.zoom.zoom);
 
       if (INERTIA_ENABLED) {
         this.world.vDeg =
           (this.pointer.x - this.prevPointerX) * this.degreesPerPixel;
-        this.world.vY = this.pointer.y - this.prevPointerY!;
+        this.world.vY = (this.pointer.y - this.prevPointerY!) / this.zoom.zoom;
       }
       this.prevPointerX = this.pointer.x;
       this.prevPointerY = this.pointer.y;
@@ -215,14 +215,26 @@ export class Planet {
       (e) => {
         e.preventDefault();
 
+        const prevZoom = this.zoom.zoom;
         this.zoom.applyWheel(e.deltaY);
-        this.root.scale.set(this.zoom.zoom);
+        const newZoom = this.zoom.zoom;
 
-        // if zoom changes mid-drag, re-anchor to avoid jumps
+        // Keep the vertical screen-center stable during zoom
+        const height = this.app.renderer.height;
+        this.world.cameraY = this.clampCameraY(
+          this.world.cameraY + (height / 2) * (1 / prevZoom - 1 / newZoom),
+        );
+
+        this.root.scale.set(newZoom);
+
+        // Re-anchor both axes mid-drag to avoid position jumps
         if (this.pointer.isDown) {
           this.dragStartPointerX = this.pointer.x;
           this.dragStartWorldXDeg = this.world.xDeg;
           this.prevPointerX = this.pointer.x;
+          this.dragStartPointerY = this.pointer.y;
+          this.dragStartCameraY = this.world.cameraY;
+          this.prevPointerY = this.pointer.y;
         }
       },
       { passive: false },

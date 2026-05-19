@@ -18,7 +18,8 @@ export class WheelZoom {
     this.zoomMin = viewWidthPx / (visibleSlicesMaxOut * sliceWidthPxAtZoom1);
     this.zoomMax = viewWidthPx / (visibleSlicesMinIn * sliceWidthPxAtZoom1);
 
-    this.zoomMin = Math.max(this.zoomMin, 0.01);
+    this.zoomMin = Math.max(this.zoomMin, 0.5);
+    this.zoomMax = Math.min(this.zoomMax, 4.0);
     this.zoomMax = Math.max(this.zoomMax, this.zoomMin);
     this.zoom = clamp(this.zoom, this.zoomMin, this.zoomMax);
   }
