@@ -46,6 +46,8 @@ export class Planet {
   private overlays: Array<{ container: Container; yMotionScale: number }> = [];
   private interactionLayer!: SliceLayer;
 
+  private autoPanDegPerTick = 0;
+
   constructor(private app: Application) {
     this.pointer = new PointerX(app);
     this.pointer.attach();
@@ -103,6 +105,8 @@ export class Planet {
   get vY():       number { return this.world.vY; }
   get zoomLevel():number { return this.zoom.zoom; }
 
+  setAutoPan(degPerTick: number): void { this.autoPanDegPerTick = degPerTick; }
+
   finalize() {
     // Call after adding layers. Ensures zoom bounds computed.
     if (!this.interactionLayer) {
@@ -111,6 +115,15 @@ export class Planet {
     this.recomputeZoomAndCenter();
     // Center the ground line (world Y=0) in the viewport on first load
     this.world.cameraY = this.clampCameraY(-this.app.renderer.height / (2 * this.zoom.zoom));
+
+    // Only the front interaction layer needs to receive pointer events.
+    // Hit-testing recurses through the scene graph on every mousemove, so
+    // opting everything else out cuts that walk to a single ring.
+    for (const layer of this.layers) {
+      if (layer !== this.interactionLayer) layer.container.eventMode = "none";
+    }
+    for (const al of this.actorLayers) al.container.eventMode = "none";
+    for (const o of this.overlays) o.container.eventMode = "none";
   }
 
   update(dt: number) {
@@ -157,10 +170,16 @@ export class Planet {
       this.prevPointerX = null;
       this.prevPointerY = null;
 
-      if (INERTIA_ENABLED) {
+      // Autopan overrides X-axis inertia so the slider holds a constant speed.
+      if (this.autoPanDegPerTick !== 0) {
+        this.world.xDeg += this.autoPanDegPerTick * dt;
+        this.world.vDeg = 0;
+      } else if (INERTIA_ENABLED) {
         this.world.vDeg *= INERTIA_FRICTION;
         this.world.xDeg = this.world.xDeg - this.world.vDeg * dt;
+      }
 
+      if (INERTIA_ENABLED) {
         this.world.vY *= INERTIA_FRICTION;
         const rawY = this.world.cameraY - this.world.vY * dt;
         const clampedY = this.clampCameraY(rawY);
@@ -292,6 +311,7 @@ export function makeBackCityLayer(config: BackCityConfig = {}) {
   const ring = new SliceRing(
     72, 5, 120,
     makeBackCityFactory({ sliceWidthPxAtZoom1: 120, baseColor, density, minH, maxH, salt, underground, undergroundDim }),
+    true,
   );
   return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
 }
@@ -329,6 +349,11 @@ export function makeDeepCoreLayer() {
   return new SliceLayer(ring, 0.82, 1.0, 0.75);
 }
 
+// Sky slices intentionally render a 10000×4155 gradient rect spanning the
+// whole viewport. Baking that to a texture would blow past the GPU's max
+// texture size and crash the cacheAsTexture shader pipeline, so the sky
+// stays uncached — its per-slice Graphics count is 1 anyway, so it isn't
+// a perf hotspot.
 export function makeSkyLayer(skyGradient?: Array<{ offset: number; color: number }>) {
   const skyRing = new SliceRing(
     36,

@@ -1,7 +1,7 @@
 import { clamp } from "../math";
 
 export class WheelZoom {
-  zoom = 1;
+  zoom = 1.1;
   zoomMin = 0.01;
   zoomMax = 100;
 

@@ -14,6 +14,7 @@ export class SliceRing {
     public readonly degPerSlice: number,
     public readonly sliceWidthPxAtZoom1: number,
     private makeSlice: SliceFactory,
+    private readonly bake = false,
   ) {
     this.basePPD = sliceWidthPxAtZoom1 / degPerSlice;
     this.build();
@@ -36,6 +37,13 @@ export class SliceRing {
       slice.addChild(content);
       this.container.addChild(slice);
       this.slices.push(slice);
+
+      // Bake the slice's static geometry into a single cached texture. Collapses
+      // ~15–20 batched Graphics into one quad, so per-frame batch repacking
+      // during pan stops dominating the frame. Resolution 2 keeps the cache
+      // crisp at moderate zoom-ins while bounding GPU memory; layers that opt
+      // in must not animate their content.
+      if (this.bake) slice.cacheAsTexture({ resolution: 2 });
     }
   }
 

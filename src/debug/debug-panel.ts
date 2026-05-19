@@ -27,6 +27,7 @@ function hexToCss(hex: number, alpha: number): string {
 export class DebugPanel {
   private el: HTMLDivElement;
   private valueEls: Record<string, HTMLSpanElement> = {};
+  private lastText: Record<string, string> = {};
   private btnEls: HTMLButtonElement[] = [];
   private palettes: Palette[] = [];
   private activeIdx = 0;
@@ -34,38 +35,55 @@ export class DebugPanel {
   private toggles: Map<string, Toggle> = new Map();
 
   onPaletteChange?: (idx: number) => void;
+  onAutopanChange?: (degPerTick: number) => void;
 
   constructor(palettes: Palette[]) {
     this.palettes = palettes;
     this.el = document.createElement('div');
     Object.assign(this.el.style, {
       position: 'fixed',
-      top: '12px',
+      bottom: '12px',
+      left: '12px',
       right: '12px',
       background: 'rgba(0,0,0,0.72)',
       border: '1px solid rgba(255,255,255,0.14)',
       borderRadius: '6px',
-      padding: '10px 12px',
+      padding: '8px 12px',
       color: '#e8e8e8',
       fontFamily: 'monospace',
       fontSize: '11px',
       lineHeight: '1.6',
       userSelect: 'none',
       zIndex: '9999',
-      minWidth: '180px',
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: '0',
     });
 
-    this.el.appendChild(this.makeSection('DEBUG'));
-    this.el.appendChild(this.makeStats());
-    this.el.appendChild(this.makeDivider());
-    this.el.appendChild(this.makeSection('OVERLAYS'));
     this.togglesWrap = this.makeTogglesWrap();
-    this.el.appendChild(this.togglesWrap);
+    this.el.appendChild(this.makeColumn('DEBUG',    this.makeStats()));
     this.el.appendChild(this.makeDivider());
-    this.el.appendChild(this.makeSection('PALETTE'));
-    this.el.appendChild(this.makePaletteButtons(palettes));
+    this.el.appendChild(this.makeColumn('OVERLAYS', this.togglesWrap));
+    this.el.appendChild(this.makeDivider());
+    this.el.appendChild(this.makeColumn('AUTOPAN',  this.makeAutopanSection(), '220px'));
+    this.el.appendChild(this.makeDivider());
+    this.el.appendChild(this.makeColumn('PALETTE',  this.makePaletteButtons(palettes), '', true));
 
     document.body.appendChild(this.el);
+  }
+
+  private makeColumn(label: string, content: HTMLElement, minWidth = '', grow = false): HTMLElement {
+    const col = document.createElement('div');
+    Object.assign(col.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      minWidth: minWidth || 'auto',
+      ...(grow ? { flex: '1 1 auto' } : {}),
+    });
+    col.appendChild(this.makeSection(label));
+    col.appendChild(content);
+    return col;
   }
 
   registerToggle(id: string, label: string, target: { visible: boolean }): void {
@@ -101,18 +119,30 @@ export class DebugPanel {
   }
 
   update(state: State): void {
-    this.valueEls.xDeg.textContent     = state.xDeg.toFixed(1) + '°';
-    this.valueEls.vDeg.textContent     = state.vDeg.toFixed(3) + ' °/t';
-    this.valueEls.cameraY.textContent  = state.cameraY.toFixed(1) + ' px';
-    this.valueEls.vY.textContent       = state.vY.toFixed(3) + ' px/t';
-    this.valueEls.zoom.textContent     = state.zoom.toFixed(3) + '×';
-    this.valueEls.fps.textContent      = state.fps.toFixed(1);
-    this.valueEls.size.textContent     = `${state.viewportW} × ${state.viewportH}`;
+    this.setText('xDeg',    state.xDeg.toFixed(1) + '°');
+    this.setText('vDeg',    state.vDeg.toFixed(3) + ' °/t');
+    this.setText('cameraY', state.cameraY.toFixed(1) + ' px');
+    this.setText('vY',      state.vY.toFixed(3) + ' px/t');
+    this.setText('zoom',    state.zoom.toFixed(3) + '×');
+    this.setText('fps',     state.fps.toFixed(1));
+    this.setText('size',    `${state.viewportW} × ${state.viewportH}`);
+  }
+
+  // Skip DOM writes when the formatted value hasn't changed — `set textContent`
+  // was the 3rd-hottest function in the panning trace.
+  private setText(key: string, value: string): void {
+    if (this.lastText[key] === value) return;
+    this.lastText[key] = value;
+    this.valueEls[key].textContent = value;
   }
 
   setActivePalette(idx: number): void {
     this.activeIdx = idx;
     this.refreshButtonStyles();
+  }
+
+  hide(): void {
+    this.el.style.display = 'none';
   }
 
   private makeSection(label: string): HTMLElement {
@@ -131,8 +161,9 @@ export class DebugPanel {
   private makeDivider(): HTMLElement {
     const el = document.createElement('div');
     Object.assign(el.style, {
-      borderTop: '1px solid rgba(255,255,255,0.1)',
-      margin: '8px 0',
+      borderLeft: '1px solid rgba(255,255,255,0.1)',
+      margin: '0 12px',
+      alignSelf: 'stretch',
     });
     return el;
   }
@@ -181,6 +212,43 @@ export class DebugPanel {
     }
 
     return grid;
+  }
+
+  private makeAutopanSection(): HTMLElement {
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, { display: 'flex', flexDirection: 'column', gap: '4px' });
+
+    const labelRow = document.createElement('div');
+    Object.assign(labelRow.style, { display: 'flex', justifyContent: 'space-between' });
+
+    const lbl = document.createElement('span');
+    lbl.textContent = 'speed';
+    Object.assign(lbl.style, { color: 'rgba(255,255,255,0.45)' });
+
+    const valEl = document.createElement('span');
+    valEl.textContent = '0.00';
+    Object.assign(valEl.style, { color: '#fff' });
+
+    labelRow.appendChild(lbl);
+    labelRow.appendChild(valEl);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '1';
+    slider.step = '0.01';
+    slider.value = '0';
+    Object.assign(slider.style, { width: '100%', margin: '0' });
+
+    slider.addEventListener('input', () => {
+      const v = parseFloat(slider.value);
+      valEl.textContent = v.toFixed(2);
+      this.onAutopanChange?.(v);
+    });
+
+    wrap.appendChild(labelRow);
+    wrap.appendChild(slider);
+    return wrap;
   }
 
   private makePaletteButtons(palettes: Palette[]): HTMLElement {

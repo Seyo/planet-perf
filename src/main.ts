@@ -123,6 +123,13 @@ function applyPalette(p: Palette): void {
 }
 
 debugPanel.onPaletteChange = (idx) => applyPalette(PALETTES[idx]);
+debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
+
+// ?live → kiosk mode: panel hidden, gentle autopan running.
+if (new URLSearchParams(window.location.search).has('live')) {
+  debugPanel.hide();
+  planet.setAutoPan(0.02);
+}
 
 app.ticker.add((ticker) => {
   planet.update(ticker.deltaTime);
