@@ -1,5 +1,20 @@
 export type SkyStop = { offset: number; color: number };
 
+export type LightPalette = {
+  name: string;
+  warmColor: number;
+  coolColor: number;
+};
+
+export const LIGHT_PALETTES: LightPalette[] = [
+  { name: "City",   warmColor: 0xffee66, coolColor: 0x88ccff },
+  { name: "Neon",   warmColor: 0xff44cc, coolColor: 0x00ffcc },
+  { name: "Ember",  warmColor: 0xff7722, coolColor: 0xffaa44 },
+  { name: "Arctic", warmColor: 0xaaeeff, coolColor: 0x55aaff },
+  { name: "Toxic",  warmColor: 0x88ff44, coolColor: 0x44ffaa },
+  { name: "Retro",  warmColor: 0xff8800, coolColor: 0xff2288 },
+];
+
 export type Palette = {
   name: string;
   backgroundColor: number;

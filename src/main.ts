@@ -8,12 +8,14 @@ import {
   makeUndergroundHazeOverlay,
   makeShallowCaveLayer,
   makeSkyLayer,
+  HAZE_TOP_Y,
 } from "./planet/planet";
 import { makeActorLayer } from "./planet/render/actor-layer";
 import { DebugPanel } from "./debug/debug-panel";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
-import { PALETTES } from "./debug/palettes";
+import { PALETTES, LIGHT_PALETTES } from "./debug/palettes";
 import type { Palette } from "./debug/palettes";
+import { setLightColors } from "./planet/render/building-v2";
 import type { SliceLayer } from "./planet/render/slice-layer";
 
 const DEFAULT_PALETTE_IDX = PALETTES.findIndex(p => p.name === 'Sunrise');
@@ -45,6 +47,7 @@ const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 
 type HazeEntry = { container: Container; alpha: number; underground: boolean };
 const hazeEntries: HazeEntry[] = [];
+const bakedLayers: SliceLayer[] = [];
 
 for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   const t           = BACK_LAYER_COUNT > 1 ? i / (BACK_LAYER_COUNT - 1) : 0;
@@ -55,10 +58,9 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
 
   const isUnderground = i >= BACK_LAYER_COUNT - 10;
   const ugT = isUnderground ? (i - (BACK_LAYER_COUNT - 10)) / 9 : 0;
-  planet.addLayer(
-    makeBackCityLayer({ motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: isUnderground, undergroundDim: isUnderground ? 0.5 * (1 - ugT) : 0 }),
-    { behindAll: true },
-  );
+  const backLayer = makeBackCityLayer({ motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: isUnderground, undergroundDim: isUnderground ? 0.5 * (1 - ugT) : 0 });
+  bakedLayers.push(backLayer);
+  planet.addLayer(backLayer, { behindAll: true });
   if (i >= ACTOR_LAYER_START) {
     planet.addActorLayer(makeActorLayer(motionScale, motionScale));
   }
@@ -93,7 +95,7 @@ app.stage.addChild(yGridOverlay.container);
 
 // --- debug panel ---
 
-const debugPanel = new DebugPanel(PALETTES);
+const debugPanel = new DebugPanel(PALETTES, LIGHT_PALETTES);
 debugPanel.setActivePalette(DEFAULT_PALETTE_IDX);
 
 // Standalone debug line — lives inside the sky layer so it follows its y-parallax.
@@ -117,13 +119,22 @@ function applyPalette(p: Palette): void {
     if (entry.underground) {
       makeUndergroundHazeOverlay(entry.alpha, p.caveHazeColor, entry.container);
     } else {
-      makeHazeOverlay(entry.alpha, p.hazeColor, -300, 10, entry.container);
+      makeHazeOverlay(entry.alpha, p.hazeColor, HAZE_TOP_Y, 10, entry.container);
     }
   }
 }
 
 debugPanel.onPaletteChange = (idx) => applyPalette(PALETTES[idx]);
 debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
+debugPanel.onLightPaletteChange = (idx) => {
+  const lp = LIGHT_PALETTES[idx];
+  setLightColors(lp.warmColor, lp.coolColor);
+  for (const layer of bakedLayers) {
+    for (const slice of layer.ring.slices) {
+      slice.updateCacheTexture();
+    }
+  }
+};
 
 // ?live → kiosk mode: panel hidden, gentle autopan running.
 if (new URLSearchParams(window.location.search).has('live')) {

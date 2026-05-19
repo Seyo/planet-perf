@@ -368,10 +368,12 @@ export function makeSkyLayer(skyGradient?: Array<{ offset: number; color: number
 // Single full-width gradient overlay — no slice boundaries, no bleed.
 // Pass to planet.addOverlay() with the same yMotionScale as its city layer.
 // Pass `into` to update an existing container in-place (for palette switching).
+export const HAZE_TOP_Y = -250;
+
 export function makeHazeOverlay(
   hazeAlpha: number,
   color = HAZE_COLOR,
-  topY = -300,
+  topY = HAZE_TOP_Y,
   bottomY = 10,
   into?: Container,
 ): Container {

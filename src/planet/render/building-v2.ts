@@ -3,6 +3,21 @@ import { type RNG, chance, randInt, randRange } from "./rng";
 
 export type { RNG };
 export type Animator = { update(tick: number): void };
+
+// Registry for dynamic light color updates via tinting
+const _warmGfxRefs: WeakRef<Graphics>[] = [];
+const _coolGfxRefs: WeakRef<Graphics>[] = [];
+
+export function setLightColors(warm: number, cool: number): void {
+  for (const ref of _warmGfxRefs) {
+    const g = ref.deref();
+    if (g && !g.destroyed) g.tint = warm;
+  }
+  for (const ref of _coolGfxRefs) {
+    const g = ref.deref();
+    if (g && !g.destroyed) g.tint = cool;
+  }
+}
 export type BuildingRect = { x: number; w: number; h: number };
 
 export type BodyTint = { x: number; y: number; w: number; h: number; d: number };
@@ -139,12 +154,34 @@ export function commitCanvas(root: Container, canvas: BuildingCanvas, theme: Bui
   }
 
   root.addChild(canvas.struct.fill({ color: theme.structColor }));
-  root.addChild(canvas.shopLight.fill({ color: theme.shopLightColor, alpha: theme.shopLightAlpha }));
+  canvas.shopLight.fill({ color: 0xffffff, alpha: theme.shopLightAlpha });
+  canvas.shopLight.tint = warmC;
+  _warmGfxRefs.push(new WeakRef(canvas.shopLight));
+  root.addChild(canvas.shopLight);
   root.addChild(canvas.glows.fill({ color: 0xffffff, alpha: theme.glowAlpha }));
-  root.addChild(canvas.warm.fill({ color: warmC, alpha: theme.warmAlpha }));
-  root.addChild(canvas.cool.fill({ color: coolC, alpha: theme.coolAlpha }));
-  for (const fg of canvas.fwarm) root.addChild(fg.fill({ color: warmC, alpha: theme.warmAlpha }));
-  for (const fg of canvas.fcool) root.addChild(fg.fill({ color: coolC, alpha: theme.coolAlpha }));
+
+  canvas.warm.fill({ color: 0xffffff, alpha: theme.warmAlpha });
+  canvas.warm.tint = warmC;
+  _warmGfxRefs.push(new WeakRef(canvas.warm));
+  root.addChild(canvas.warm);
+
+  canvas.cool.fill({ color: 0xffffff, alpha: theme.coolAlpha });
+  canvas.cool.tint = coolC;
+  _coolGfxRefs.push(new WeakRef(canvas.cool));
+  root.addChild(canvas.cool);
+
+  for (const fg of canvas.fwarm) {
+    fg.fill({ color: 0xffffff, alpha: theme.warmAlpha });
+    fg.tint = warmC;
+    _warmGfxRefs.push(new WeakRef(fg));
+    root.addChild(fg);
+  }
+  for (const fg of canvas.fcool) {
+    fg.fill({ color: 0xffffff, alpha: theme.coolAlpha });
+    fg.tint = coolC;
+    _coolGfxRefs.push(new WeakRef(fg));
+    root.addChild(fg);
+  }
 }
 
 export function registerFlickerAnimators(

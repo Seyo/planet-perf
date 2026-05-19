@@ -1,4 +1,4 @@
-import type { Palette } from './palettes';
+import type { Palette, LightPalette } from './palettes';
 
 type State = {
   xDeg: number;
@@ -31,14 +31,19 @@ export class DebugPanel {
   private btnEls: HTMLButtonElement[] = [];
   private palettes: Palette[] = [];
   private activeIdx = 0;
+  private lightBtnEls: HTMLButtonElement[] = [];
+  private lightPalettes: LightPalette[] = [];
+  private activeLightIdx = 0;
   private togglesWrap!: HTMLElement;
   private toggles: Map<string, Toggle> = new Map();
 
   onPaletteChange?: (idx: number) => void;
   onAutopanChange?: (degPerTick: number) => void;
+  onLightPaletteChange?: (idx: number) => void;
 
-  constructor(palettes: Palette[]) {
+  constructor(palettes: Palette[], lightPalettes: LightPalette[]) {
     this.palettes = palettes;
+    this.lightPalettes = lightPalettes;
     this.el = document.createElement('div');
     Object.assign(this.el.style, {
       position: 'fixed',
@@ -68,7 +73,9 @@ export class DebugPanel {
     this.el.appendChild(this.makeDivider());
     this.el.appendChild(this.makeColumn('AUTOPAN',  this.makeAutopanSection(), '220px'));
     this.el.appendChild(this.makeDivider());
-    this.el.appendChild(this.makeColumn('PALETTE',  this.makePaletteButtons(palettes), '', true));
+    this.el.appendChild(this.makeColumn('PALETTE',  this.makePaletteButtons(palettes), '', false));
+    this.el.appendChild(this.makeDivider());
+    this.el.appendChild(this.makeColumn('LIGHTS',   this.makeLightPaletteButtons(lightPalettes), '', true));
 
     document.body.appendChild(this.el);
   }
@@ -298,6 +305,63 @@ export class DebugPanel {
         Object.assign(btn.style, {
           background: hexToCss(p.hazeColor, 0.28),
           border: `1px solid ${hexToCss(p.hazeColor, 0.55)}`,
+        });
+      }
+    });
+  }
+
+  setActiveLightPalette(idx: number): void {
+    this.activeLightIdx = idx;
+    this.refreshLightButtonStyles();
+  }
+
+  private makeLightPaletteButtons(palettes: LightPalette[]): HTMLElement {
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '4px',
+    });
+
+    palettes.forEach((p, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = p.name;
+
+      Object.assign(btn.style, {
+        cursor: 'pointer',
+        fontFamily: 'monospace',
+        fontSize: '10px',
+        padding: '2px 6px',
+        borderRadius: '3px',
+        color: '#fff',
+        transition: 'none',
+      });
+
+      btn.addEventListener('click', () => {
+        this.setActiveLightPalette(i);
+        this.onLightPaletteChange?.(i);
+      });
+
+      this.lightBtnEls.push(btn);
+      wrap.appendChild(btn);
+    });
+
+    this.refreshLightButtonStyles();
+    return wrap;
+  }
+
+  private refreshLightButtonStyles(): void {
+    this.lightBtnEls.forEach((btn, i) => {
+      const p = this.lightPalettes[i];
+      if (i === this.activeLightIdx) {
+        Object.assign(btn.style, {
+          background: hexToCss(p.warmColor, 0.55),
+          border: `1px solid ${hexToCss(p.warmColor, 1.0)}`,
+        });
+      } else {
+        Object.assign(btn.style, {
+          background: hexToCss(p.warmColor, 0.18),
+          border: `1px solid ${hexToCss(p.warmColor, 0.45)}`,
         });
       }
     });
