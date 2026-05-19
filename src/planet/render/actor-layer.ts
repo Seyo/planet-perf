@@ -2,8 +2,8 @@ import { Container, Graphics } from "pixi.js";
 import { normalize180 } from "../math";
 
 const BASE_PPD = 24; // 120px / 5deg — matches all building rings
-const Y_SKY_MIN       = -130;
-const Y_UG_MAX        =  430;
+const Y_SKY_MIN       = -200;
+const Y_UG_MAX        =  230;
 const SURFACE_Y       =   -2; // top of dirt — matches surfaceY in makeGroundSectionFactory
 const GROUND_BOTTOM_Y =   62; // bottom of dirt — matches bottomY in makeGroundSectionFactory
 const ABOVE_FRACTION  = 0.70; // 70% of cars above ground
@@ -47,8 +47,8 @@ class Car {
     this.destDeg = this.deg;
     this.destY   = this.y;
     this.speed   = 0.25 + Math.random() * 0.35;
-    // half-length: cars 2–4px, buses/trucks up to 10px
-    const halfLen   = 2 + Math.random() ** 2 * 8;
+    // half-length: cars 2–4px, buses/trucks up to 6px
+    const halfLen   = 2 + Math.random() ** 2 * 4;
     const headColor = HEADLIGHT_COLORS[Math.floor(Math.random() * HEADLIGHT_COLORS.length)];
     this.gfx     = makeCar(halfLen, headColor);
     this.pickNewDest();

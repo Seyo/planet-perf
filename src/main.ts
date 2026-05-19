@@ -77,8 +77,8 @@ planet.addLayer(makeGroundLayer(),   { behindAll: true });
 planet.addLayer(makeFrontLayer(planet.animators), { asInteractionLayer: true });
 planet.addActorLayer(makeActorLayer(1.0, 1.0));
 
-const frontHazeContainer = makeHazeOverlay(0.05, PALETTES[DEFAULT_PALETTE_IDX].hazeColor);
-hazeEntries.push({ container: frontHazeContainer, alpha: 0.05, underground: false });
+const frontHazeContainer = makeHazeOverlay(0.25, PALETTES[DEFAULT_PALETTE_IDX].hazeColor);
+hazeEntries.push({ container: frontHazeContainer, alpha: 0.25, underground: false });
 planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();

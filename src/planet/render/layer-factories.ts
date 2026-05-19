@@ -7,11 +7,11 @@ import {
   makeCanvas, commitCanvas, registerFlickerAnimators,
   drawBuilding, drawStreetLamps, drawBridge, drawDetailedGreebles, drawSimpleGreebles,
   FRONT_THEME, BACK_THEME,
-  type Animator, type BuildingRect,
-} from "./building";
+  type Animator, type BuildingRect, type BuildingTheme, type BuildingOpts,
+} from "./building-v2";
 import type { SliceFactory } from "./slice-ring";
 
-export type { Animator } from "./building";
+export type { Animator } from "./building-v2";
 
 export function shouldSpawn(sliceIndex: number, density: number, salt = 1): boolean {
   const rng = mulberry32(hashSeed(sliceIndex, salt));
@@ -53,10 +53,19 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
   } = opts;
 
   return (i) => {
-    const root   = new Container();
-    const rng    = mulberry32(hashSeed(i, salt));
-    const canvas = makeCanvas(3);
+    const root = new Container();
+    const rng  = mulberry32(hashSeed(i, salt));
     const built: BuildingRect[] = [];
+    const theme: BuildingTheme = { ...FRONT_THEME, baseColor };
+
+    const drawIsolated = (b: BuildingRect, opts: BuildingOpts) => {
+      const c = makeCanvas(3);
+      drawBuilding(c, rng, b, opts);
+      const sub = new Container();
+      commitCanvas(sub, c, theme);
+      if (animators) registerFlickerAnimators(c, rng, animators);
+      root.addChild(sub);
+    };
 
     // Pass 1: low-rise fillers (always present, keeps ground covered)
     const fillerCount = randInt(rng, 3, 5);
@@ -65,7 +74,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
       const h = randInt(rng, 8, 38);
       const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
       built.push(building);
-      drawBuilding(canvas, rng, building, {
+      drawIsolated(building, {
         yBase,
         windowMinH:     18,
         windowOpts:     { stepX: 4, stepY: 4, padTop: 4, padBottom: 6, density: 0.45 },
@@ -81,28 +90,30 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
         const h = randInt(rng, 20, 280);
         const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
         built.push(building);
-        drawBuilding(canvas, rng, building, {
+        drawIsolated(building, {
           yBase,
           windowMinH:       25,
           antennaChance:    0.55,
           shopFrontChance:  0.45,
           landingPadChance: 0.10,
           landingPadMinH:   150,
+          diagonalAccentChance: 0.1,
+          chamferChance:0.95,
+          
         });
       }
     }
 
-    drawStreetLamps(canvas, rng, sliceWidthPxAtZoom1, yBase);
-
+    // Slice-level features on a single canvas painted ON TOP of all buildings.
+    const sliceCanvas = makeCanvas(0);
+    drawStreetLamps(sliceCanvas, rng, sliceWidthPxAtZoom1, yBase);
     if (chance(rng, 0.28)) {
-      drawBridge(canvas, rng, built, yBase, { minHeight: 40, bridgeHeight: 2, endpointGlows: true, lightCount: [3, 6] });
+      drawBridge(sliceCanvas, rng, built, yBase, { minHeight: 40, bridgeHeight: 2, endpointGlows: true, lightCount: [3, 6] });
     }
-
-    drawDetailedGreebles(canvas, rng, randInt(rng, 10, 20), sliceWidthPxAtZoom1, yBase);
-
-    const theme = { ...FRONT_THEME, baseColor };
-    commitCanvas(root, canvas, theme);
-    if (animators) registerFlickerAnimators(canvas, rng, animators);
+    drawDetailedGreebles(sliceCanvas, rng, randInt(rng, 10, 20), sliceWidthPxAtZoom1, yBase);
+    const sliceContainer = new Container();
+    commitCanvas(sliceContainer, sliceCanvas, theme);
+    root.addChild(sliceContainer);
 
     return root;
   };
@@ -123,30 +134,45 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
   } = opts;
 
   return (i) => {
-    const root   = new Container();
-    const rng    = mulberry32(hashSeed(i, salt));
-    const canvas = makeCanvas(0);
-
-    // Ground plate — prevents background bleed-through below building bases
-    root.addChild(
-      new Graphics().rect(0, yBase, sliceWidthPxAtZoom1, 20).fill({ color: baseColor }),
-    );
+    const root = new Container();
+    const rng = mulberry32(hashSeed(i, salt));
+    const theme: BuildingTheme = { ...BACK_THEME, baseColor };
 
     const built: BuildingRect[] = [];
+
+    const drawIsolated = (b: BuildingRect, opts: BuildingOpts) => {
+      const c = makeCanvas(0);
+      drawBuilding(c, rng, b, opts);
+      const sub = new Container();
+      commitCanvas(sub, c, theme);
+      root.addChild(sub);
+    };
 
     // Pass 1: low-rise fillers
     const fillerCount = randInt(rng, 2, 4);
     for (let b = 0; b < fillerCount; b++) {
       const w = randInt(rng, 4, 14) + 0.5;
       const h = randInt(rng, 5, 22);
-      const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
+      const building = {
+        x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)),
+        w,
+        h,
+      };
       built.push(building);
-      drawBuilding(canvas, rng, building, {
+      drawIsolated(building, {
         yBase,
-        windowMinH:      8,
-        windowOpts:      { stepX: 5, stepY: 5, padTop: 3, padBottom: 6, padLeft: 1, padRight: 2, density: 0.30 },
+        windowMinH: 8,
+        windowOpts: {
+          stepX: 5,
+          stepY: 5,
+          padTop: 3,
+          padBottom: 6,
+          padLeft: 1,
+          padRight: 2,
+          density: 0.3,
+        },
         shopFrontChance: 0.45,
-        shopFrontMinH:   8,
+        shopFrontMinH: 8,
       });
     }
 
@@ -156,102 +182,148 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
       for (let b = 0; b < count; b++) {
         const w = randInt(rng, 5, 18) + 0.5;
         const h = randInt(rng, minH, maxH);
-        const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
+        const building = {
+          x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)),
+          w,
+          h,
+        };
         built.push(building);
-        drawBuilding(canvas, rng, building, {
+        drawIsolated(building, {
           yBase,
-          windowMinH:         25,
-          antennaChance:      0.5,
-          antennaPadX:        1,
-          antennaHRange:      [5, 14],
+          windowMinH: 25,
+          antennaChance: 0.5,
+          antennaPadX: 1,
+          antennaHRange: [5, 14],
           antennaLightChance: 0.45,
-          shopFrontChance:    0.35,
+          shopFrontChance: 0.35,
+          diagonalAccentChance: 0.1,
+          chamferChance: 0.95,
         });
       }
     }
 
-    // Mid-level bridges
+    // Slice-level features on a single canvas painted ON TOP of all buildings.
+    const sliceCanvas = makeCanvas(0);
     const bridgeCount = randInt(rng, 1, 2);
     for (let br = 0; br < bridgeCount; br++) {
       if (!chance(rng, 0.45)) continue;
-      drawBridge(canvas, rng, built, yBase, { minHeight: 30, bridgeHeight: 1, endpointGlows: false, lightCount: [2, 4] });
+      drawBridge(sliceCanvas, rng, built, yBase, {
+        minHeight: 30,
+        bridgeHeight: 1,
+        endpointGlows: false,
+        lightCount: [2, 4],
+      });
     }
-
-    drawSimpleGreebles(canvas, rng, randInt(rng, 8, 14), sliceWidthPxAtZoom1, yBase);
-
-    const theme = { ...BACK_THEME, baseColor };
-    commitCanvas(root, canvas, theme);
+    drawSimpleGreebles(
+      sliceCanvas,
+      rng,
+      randInt(rng, 8, 14),
+      sliceWidthPxAtZoom1,
+      yBase,
+    );
+    const sliceContainer = new Container();
+    commitCanvas(sliceContainer, sliceCanvas, theme);
+    root.addChild(sliceContainer);
 
     if (underground) {
-      const ugBodies = new Graphics();
-      const ugStruct = new Graphics();
-      const ugGlows  = new Graphics();
-      const ugWarm   = new Graphics();
-      const ugCool   = new Graphics();
-
-      for (const { x, w, h } of built) {
-        ugBodies.rect(x, yBase, w, h);
-      }
-
       const ugRng = mulberry32(hashSeed(i, salt + 99999));
-      for (const { x, w, h } of built) {
-        if (h <= 25) continue;
-        for (let wy = yBase + 5; wy <= yBase + h - 9; wy += 3) {
-          for (let wx = x + 1; wx <= x + w - 2; wx += 3) {
-            if (!chance(ugRng, 0.033)) continue;
-            ugGlows.rect(wx - 1, wy - 1, 3, 3);
-            if (chance(ugRng, 0.6)) ugWarm.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
-            else                    ugCool.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
-          }
-        }
+
+      const depthT = undergroundDim * 2;
+      const ugBodyColor =
+        (Math.round(0x1a * depthT) << 16) |
+        (Math.round(0x22 * depthT) << 8) |
+        Math.round(0x32 * depthT);
+
+      const ugTheme: BuildingTheme = {
+        baseColor: ugBodyColor,
+        structColor: 0x0a0e16,
+        shopLightColor: 0xffbb44,
+        shopLightAlpha: 0.04,
+        glowAlpha: 0.02,
+        warmColor: 0xffee66,
+        warmAlpha: 0.22,
+        coolColor: 0x88ccff,
+        coolAlpha: 0.22,
+      };
+
+      // Draw all underground buildings into one canvas at local yBase=0, so
+      // each occupies local y=[-b.h, 0] with its chamfered tip at -b.h.
+      // Bridges go at local y = -depth. The whole canvas is then flipped
+      // (scale.y = -1) and shifted to the surface, landing wide bases at the
+      // surface and tapered tips deepest — proper inverted skyscrapers.
+      // Antennas/landing pads/shop fronts/neon/diagonals stay off — just dim
+      // tiered silhouettes with rare lit windows.
+      const ugCanvas = makeCanvas(0);
+      for (const b of built) {
+        drawBuilding(ugCanvas, ugRng, b, {
+          yBase: 0,
+          windowMinH: 25,
+          windowOpts: {
+            stepX: 4,
+            stepY: 4,
+            padTop: 4,
+            padBottom: 6,
+            density: 0.05,
+            warmChance: 0.55,
+          },
+          antennaChance: 0,
+          shopFrontChance: 0,
+          landingPadChance: 0,
+          neonTrimChance: 0,
+          diagonalAccentChance: 0,
+          chamferChance: 0.4,
+        });
       }
 
       const ugSorted = [...built].sort((a, b) => a.x - b.x);
       const ugBridgeCount = randInt(ugRng, 1, 2);
       for (let br = 0; br < ugBridgeCount; br++) {
         if (!chance(ugRng, 0.45)) continue;
-        let bx = -1, bw = 0, bridgeY = yBase;
+        let bx = -1,
+          bw = 0,
+          bridgeY = 0;
         outer: for (let ai = 0; ai < ugSorted.length - 1; ai++) {
           for (let bi = ai + 1; bi < ugSorted.length; bi++) {
-            const a = ugSorted[ai], b = ugSorted[bi];
+            const a = ugSorted[ai],
+              b = ugSorted[bi];
             const gap = b.x - (a.x + a.w);
             if (gap < 5) continue;
             const maxDepth = Math.min(a.h, b.h) - 5;
             if (maxDepth < 60) continue;
-            bridgeY = yBase + randInt(ugRng, 60, maxDepth);
+            bridgeY = -randInt(ugRng, 60, maxDepth);
             bx = Math.floor(a.x + a.w);
             bw = Math.floor(gap);
             break outer;
           }
         }
         if (bx < 0) continue;
-        ugStruct.rect(bx, bridgeY, bw, 1);
+        ugCanvas.struct.rect(bx, bridgeY, bw, 1);
         const lightCount = randInt(ugRng, 2, 4);
         for (let l = 0; l < lightCount; l++) {
           if (!chance(ugRng, 0.05)) continue;
           const lx = bx + Math.round((l + 0.5) * (bw / lightCount));
-          ugGlows.rect(lx - 1, bridgeY - 1, 3, 3);
-          if (chance(ugRng, 0.6)) ugWarm.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
-          else                    ugCool.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
+          ugCanvas.glows.rect(lx - 1, bridgeY - 1, 3, 3);
+          if (chance(ugRng, 0.6))
+            ugCanvas.warm.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
+          else ugCanvas.cool.rect(lx + 0.5, bridgeY + 0.5, 0.5, 0.5);
         }
       }
 
-      const depthT = undergroundDim * 2;
-      const ugBodyColor = (Math.round(0x1a * depthT) << 16)
-                        | (Math.round(0x22 * depthT) << 8)
-                        |  Math.round(0x32 * depthT);
-
       const ugContainer = new Container();
-      ugContainer.addChild(ugBodies.fill({ color: ugBodyColor }));
-      ugContainer.addChild(ugStruct.fill({ color: 0x0e1520 }));
-      ugContainer.addChild(ugGlows.fill({ color: 0xffffff, alpha: 0.05 }));
-      ugContainer.addChild(ugWarm.fill({ color: 0xffee66, alpha: 0.7 }));
-      ugContainer.addChild(ugCool.fill({ color: 0x88ccff, alpha: 0.7 }));
+      commitCanvas(ugContainer, ugCanvas, ugTheme);
+      ugContainer.scale.y = -1;
+      ugContainer.y = yBase;
       root.addChild(ugContainer);
     }
+    // Ground plate — prevents background bleed-through below building bases
+    root.addChild(
+      new Graphics()
+        .rect(0, yBase, sliceWidthPxAtZoom1, 50)
+        .fill({ color: baseColor }),
+    );
 
     return root;
-  };
+  };;
 }
 
 // Ground cross-section: surface path + layered earth between buildings and cave
