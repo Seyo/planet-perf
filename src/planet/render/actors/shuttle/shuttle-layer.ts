@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from "pixi.js";
-import { normalize180 } from "../math";
+import { normalize180, clamp, lerpColor } from "../../../math";
 
 const BASE_PPD = 24;
 const SURFACE_Y = -2;
@@ -21,13 +21,13 @@ const WAIT_TICKS_MAX   = 360;
 const MAX_TRAIL_POINTS   = 100;
 const TRAIL_SPEED_FACTOR = 20;
 
-const MAX_EXPLOSION_FRAMES   = 90;
-const AIR_RING_RADIUS        = 90;
-const GROUND_RING_RADIUS     = 50;
-const EXPLOSION_LIGHT_RADIUS = 250;
-const DEBRIS_GRAVITY         = 0.04;
-const DEBRIS_TRAIL_POINTS    = 120;
-const DEBRIS_LINGER_FRAMES   = 80;
+const MAX_EXPLOSION_FRAMES = 90;
+const AIR_RING_RADIUS      = 90;
+const GROUND_RING_RADIUS   = 50;
+const DEBRIS_GRAVITY       = 0.04;
+const DEBRIS_TRAIL_POINTS  = 120;
+const DEBRIS_LINGER_FRAMES = 80;
+const LAYOUT_CULL_PAD      = 400;
 
 // Callout geometry (world-space units)
 const CALLOUT_RING  = 5;   // selection circle radius
@@ -36,17 +36,26 @@ const CALLOUT_HORIZ = 18;  // horizontal leg length
 
 type Phase = 'grounded' | 'ascending' | 'cruising' | 'descending' | 'dying';
 
-function clamp(v: number, lo: number, hi: number): number {
-  return v < lo ? lo : v > hi ? hi : v;
-}
+// Camera snapshot used to position, cull, and render elements in a layer.
+type CameraView = { cameraDeg: number; zoom: number; halfW: number; ppd: number; showCallout: boolean };
 
-function lerpColor(a: number, b: number, t: number): number {
-  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  return (Math.round(ar + (br - ar) * t) << 16)
-       | (Math.round(ag + (bg - ag) * t) << 8)
-       |  Math.round(ab + (bb - ab) * t);
-}
+// Paired engine/nose colours for a shuttle.
+type ShuttleColors = { warm: number; cool: number };
+
+// Position and velocity at the moment of an explosion trigger.
+type ExplosionOrigin = { deg: number; y: number; vDeg: number; vY: number };
+
+// Minimal world-space position (deg + y).
+type DegY = { deg: number; y: number };
+
+// One simulation step, carrying the delta-time through the internal update chain.
+type Tick = { dt: number };
+
+// Configuration for a shuttle callout label overlay.
+type CalloutConfig = { label: string };
+
+// Common interface for pruneable effects (explosions, debris).
+type Effect = { isDone(): boolean; gfx: Container };
 
 // Maps trail freshness t (1=fresh tip, 0=old tail) → fire/smoke color.
 // Fire is only the top ~25% near the debris; the rest quickly becomes dark smoke.
@@ -57,7 +66,7 @@ function getDebrisTrailColor(t: number): number {
   return 0x222222; // smoke (bottom 60% of trail)
 }
 
-function makeCallout(label: string): Container {
+function makeCallout(config: CalloutConfig): Container {
   const c = new Container();
 
   // Selection ring around the shuttle body
@@ -76,7 +85,7 @@ function makeCallout(label: string): Container {
 
   // Text vertically centred, anchored to the right end of the horizontal line
   const text = new Text({
-    text: label,
+    text: config.label,
     style: { fill: '#ffffff', fontSize: 7, fontFamily: 'monospace' },
   });
   text.anchor.set(0, 0.5);
@@ -96,15 +105,15 @@ class Explosion {
   private readonly maxRingRadius: number;
   readonly gfx: Graphics;
 
-  constructor(deg: number, y: number, maxRingRadius = AIR_RING_RADIUS) {
-    this.deg = deg;
-    this.y   = y;
+  constructor(pos: DegY, maxRingRadius = AIR_RING_RADIUS) {
+    this.deg = pos.deg;
+    this.y   = pos.y;
     this.maxRingRadius = maxRingRadius;
     this.gfx = new Graphics();
   }
 
-  update(dt: number) {
-    this.age += dt;
+  update(tick: Tick) {
+    this.age += tick.dt;
   }
 
   draw() {
@@ -139,11 +148,11 @@ class Debris {
   private readonly trailGfx: Graphics;
   private readonly bodyGfx: Graphics;
 
-  constructor(deg: number, y: number, vDeg: number, vY: number) {
-    this.deg  = deg;
-    this.y    = y;
-    this.vDeg = vDeg;
-    this.vY   = vY;
+  constructor(origin: ExplosionOrigin) {
+    this.deg  = origin.deg;
+    this.y    = origin.y;
+    this.vDeg = origin.vDeg;
+    this.vY   = origin.vY;
     this.trail = Array.from({ length: DEBRIS_TRAIL_POINTS }, () => ({ deg: 0, y: 0 }));
 
     this.trailGfx = new Graphics();
@@ -155,15 +164,15 @@ class Debris {
     this.gfx.addChild(this.trailGfx, this.bodyGfx);
   }
 
-  update(dt: number) {
+  update(tick: Tick) {
     if (this.landed) {
-      this.lingerTick += dt;
+      this.lingerTick += tick.dt;
       return;
     }
 
-    this.vY  += DEBRIS_GRAVITY * dt;
-    this.deg  = ((this.deg + this.vDeg * dt) % 360 + 360) % 360;
-    this.y   += this.vY * dt;
+    this.vY  += DEBRIS_GRAVITY * tick.dt;
+    this.deg  = ((this.deg + this.vDeg * tick.dt) % 360 + 360) % 360;
+    this.y   += this.vY * tick.dt;
 
     this.trailHead = (this.trailHead - 1 + DEBRIS_TRAIL_POINTS) % DEBRIS_TRAIL_POINTS;
     const slot = this.trail[this.trailHead];
@@ -179,7 +188,7 @@ class Debris {
     }
   }
 
-  drawTrail(ppd: number) {
+  drawTrail(view: CameraView) {
     this.trailGfx.clear();
     if (this.trailCount < 2) return;
 
@@ -195,9 +204,9 @@ class Debris {
 
       const color = getDebrisTrailColor(t);
 
-      const ax = normalize180(ptA.deg - this.deg) * ppd;
+      const ax = normalize180(ptA.deg - this.deg) * view.ppd;
       const ay = ptA.y - this.y;
-      const bx = normalize180(ptB.deg - this.deg) * ppd;
+      const bx = normalize180(ptB.deg - this.deg) * view.ppd;
       const by = ptB.y - this.y;
 
       const alpha = fadeAlpha * t;
@@ -227,6 +236,8 @@ class Shuttle {
   private readonly engGlow: Graphics;
   private readonly callout: Container;
   private readonly maxSpeed: number;
+  private warmColor: number;
+  private coolColor: number;
   private phase: Phase = 'grounded';
   private waitTicks      = 0;
   private dirSign        = 1;
@@ -236,7 +247,7 @@ class Shuttle {
   private willExplode      = false;
   private dyingTrailLen    = 0;
   private dyingTrailMax    = 0;
-  public pendingExplosion: { deg: number; y: number; vDeg: number; vY: number } | null = null;
+  public pendingExplosion: ExplosionOrigin | null = null;
   private readonly trail: Array<{ deg: number; y: number; vDeg: number }>;
   private trailHead  = 0;
   private trailCount = 0;
@@ -246,20 +257,22 @@ class Shuttle {
     return this.phase !== 'grounded' && this.phase !== 'dying';
   }
 
-  constructor(warmColor: number, coolColor: number, label: string) {
-    this.deg      = Math.random() * 360;
-    this.halfLen  = 3 + Math.random() * 2;
-    this.maxSpeed = MAX_HORIZ_SPEED * (0.75 + Math.random() * 0.5); // 75–125% of base
-    this.trail    = Array.from({ length: MAX_TRAIL_POINTS }, () => ({ deg: 0, y: 0, vDeg: 0 }));
-    this.trailGfx = new Graphics();
+  constructor(colors: ShuttleColors, label: string) {
+    this.deg       = Math.random() * 360;
+    this.halfLen   = 3 + Math.random() * 2;
+    this.maxSpeed  = MAX_HORIZ_SPEED * (0.75 + Math.random() * 0.5); // 75–125% of base
+    this.warmColor = colors.warm;
+    this.coolColor = colors.cool;
+    this.trail     = Array.from({ length: MAX_TRAIL_POINTS }, () => ({ deg: 0, y: 0, vDeg: 0 }));
+    this.trailGfx  = new Graphics();
 
     const body   = new Graphics().rect(-this.halfLen, -0.5, this.halfLen * 2, 1).fill(0x222233);
-    this.engGlow = new Graphics().circle(-this.halfLen, 0, 2).fill({ color: warmColor, alpha: 0.25 });
-    const nose   = new Graphics().circle(this.halfLen, 0, 0.5).fill(coolColor);
+    this.engGlow = new Graphics().circle(-this.halfLen, 0, 2).fill({ color: colors.warm, alpha: 0.25 });
+    const nose   = new Graphics().circle(this.halfLen, 0, 0.5).fill(colors.cool);
     this.bodyGfx = new Container();
     this.bodyGfx.addChild(body, this.engGlow, nose);
 
-    this.callout = makeCallout(label);
+    this.callout = makeCallout({ label });
     this.callout.visible = false;
 
     this.gfx = new Container();
@@ -267,13 +280,11 @@ class Shuttle {
     this.startWait();
   }
 
-  setColors(warm: number, cool: number) {
+  setColors(colors: ShuttleColors) {
+    this.warmColor = colors.warm;
+    this.coolColor = colors.cool;
     this.engGlow.clear();
-    this.engGlow.circle(-this.halfLen, 0, 2).fill({ color: warm, alpha: 0.25 });
-  }
-
-  setCalloutVisible(v: boolean) {
-    this.callout.visible = v;
+    this.engGlow.circle(-this.halfLen, 0, 2).fill({ color: colors.warm, alpha: 0.25 });
   }
 
   private startWait() {
@@ -324,74 +335,89 @@ class Shuttle {
     this.bodyGfx.visible = false;
   }
 
-  update(dt: number) {
-    if (this.phase === 'grounded') {
-      this.waitTicks -= dt;
-      if (this.waitTicks <= 0) this.launch();
-      return;
-    }
+  private updateGrounded(tick: Tick): void {
+    this.waitTicks -= tick.dt;
+    if (this.waitTicks <= 0) this.launch();
+  }
 
-    if (this.phase === 'dying') {
-      this.dyingTrailLen -= dt;
-      if (this.dyingTrailLen <= 0) {
-        this.deg = Math.random() * 360; // teleport before landing so remnant is off-screen
-        this.startWait();
-      }
-      return;
-    }
-
-    const targetY  = this.phase === 'descending' ? SURFACE_Y : this.cruiseY;
-    const errY     = targetY - this.y;
-    // Ascending/cruising: high gain → steep climb, snaps to cruise altitude (fighting gravity).
-    // Descending: low gain → 150px decel zone → S-curve arrival.
-    const pdGain   = this.phase === 'descending' ? 0.008 : 0.12;
-    const targetVY = clamp(errY * pdGain, -MAX_CLIMB_RATE, MAX_DESCENT_RATE);
-    this.vY += clamp(targetVY - this.vY, -MAX_VERT_ACCEL * dt, MAX_VERT_ACCEL * dt);
-
-    let targetSpeed: number;
-    if (this.phase === 'ascending') {
-      targetSpeed = this.maxSpeed * 0.35; // slow climb — fighting gravity
-    } else if (this.phase === 'cruising') {
-      targetSpeed = this.maxSpeed;
-    } else {
-      // Quadratic decel: maintains speed through most of descent, brakes hard near ground.
-      // This pairs with the low vY gain to create an S-curve arrival.
-      const af = clamp((this.y - this.cruiseY) / (SURFACE_Y - this.cruiseY), 0, 1);
-      targetSpeed = this.maxSpeed * (1 - af * af);
-    }
-    const targetVDeg = targetSpeed * this.dirSign;
-    this.vDeg += clamp(targetVDeg - this.vDeg, -MAX_TURN_ACCEL * dt, MAX_TURN_ACCEL * dt);
-
-    this.deg = ((this.deg + this.vDeg * dt) % 360 + 360) % 360;
-    this.y  += this.vY * dt;
-
-    if (this.phase === 'ascending' && Math.abs(this.y - this.cruiseY) < LEVEL_THRESHOLD) {
-      this.phase = 'cruising';
-    }
-    if (this.phase === 'cruising') {
-      this.traveledDeg += Math.abs(this.vDeg * dt);
-      if (this.willExplode && this.traveledDeg >= this.cruiseDegLimit * 0.5) {
-        this.triggerExplosion();
-        return;
-      }
-      if (this.traveledDeg >= this.cruiseDegLimit) this.phase = 'descending';
-    }
-    if (this.phase === 'descending' && this.y >= SURFACE_Y - LAND_THRESHOLD) {
+  private updateDying(tick: Tick): void {
+    this.dyingTrailLen -= tick.dt;
+    if (this.dyingTrailLen <= 0) {
+      this.deg = Math.random() * 360; // teleport before landing so remnant is off-screen
       this.startWait();
-      return;
     }
+  }
 
+  private vertControlParams(): { targetY: number; pdGain: number } {
+    const targetY = this.phase === 'descending' ? SURFACE_Y : this.cruiseY;
+    const pdGain  = this.phase === 'descending' ? 0.008 : 0.12;
+    return { targetY, pdGain };
+  }
+
+  private horizTargetSpeed(): number {
+    if (this.phase === 'ascending') return this.maxSpeed * 0.35; // slow climb — fighting gravity
+    if (this.phase === 'cruising')  return this.maxSpeed;
+    // Quadratic decel: maintains speed through most of descent, brakes hard near ground.
+    const af = clamp((this.y - this.cruiseY) / (SURFACE_Y - this.cruiseY), 0, 1);
+    return this.maxSpeed * (1 - af * af);
+  }
+
+  private applyPhysics(tick: Tick): void {
+    const { targetY, pdGain } = this.vertControlParams();
+    const targetVY = clamp((targetY - this.y) * pdGain, -MAX_CLIMB_RATE, MAX_DESCENT_RATE);
+    this.vY += clamp(targetVY - this.vY, -MAX_VERT_ACCEL * tick.dt, MAX_VERT_ACCEL * tick.dt);
+
+    const targetVDeg = this.horizTargetSpeed() * this.dirSign;
+    this.vDeg += clamp(targetVDeg - this.vDeg, -MAX_TURN_ACCEL * tick.dt, MAX_TURN_ACCEL * tick.dt);
+
+    this.deg = ((this.deg + this.vDeg * tick.dt) % 360 + 360) % 360;
+    this.y  += this.vY * tick.dt;
+  }
+
+  private recordTrail(): void {
     this.trailHead = (this.trailHead - 1 + MAX_TRAIL_POINTS) % MAX_TRAIL_POINTS;
     const slot = this.trail[this.trailHead];
     slot.deg  = this.deg;
     slot.y    = this.y;
     slot.vDeg = this.vDeg;
     if (this.trailCount < MAX_TRAIL_POINTS) this.trailCount++;
+  }
 
+  // Returns true when the shuttle has just triggered an explosion (caller must return early).
+  private checkCruisingPhase(tick: Tick): boolean {
+    this.traveledDeg += Math.abs(this.vDeg * tick.dt);
+    if (this.willExplode && this.traveledDeg >= this.cruiseDegLimit * 0.5) {
+      this.triggerExplosion();
+      return true;
+    }
+    if (this.traveledDeg >= this.cruiseDegLimit) this.phase = 'descending';
+    return false;
+  }
+
+  private updateFlying(tick: Tick): void {
+    this.applyPhysics(tick);
+
+    if (this.phase === 'ascending' && Math.abs(this.y - this.cruiseY) < LEVEL_THRESHOLD) {
+      this.phase = 'cruising';
+    }
+    if (this.phase === 'cruising' && this.checkCruisingPhase(tick)) return;
+    if (this.phase === 'descending' && this.y >= SURFACE_Y - LAND_THRESHOLD) {
+      this.startWait();
+      return;
+    }
+
+    this.recordTrail();
     this.bodyGfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
   }
 
-  drawTrail(cameraDeg: number, ppd: number, warmColor: number, coolColor: number) {
+  update(tick: Tick): void {
+    if (this.phase === 'grounded') { this.updateGrounded(tick); return; }
+    if (this.phase === 'dying')    { this.updateDying(tick);    return; }
+    this.updateFlying(tick);
+  }
+
+  drawTrail(view: CameraView) {
+    this.callout.visible = view.showCallout;
     this.trailGfx.clear();
     if (this.phase === 'grounded' || this.trailCount < 2) return;
 
@@ -402,17 +428,17 @@ class Shuttle {
     const visibleLen = dying
       ? Math.max(0, Math.ceil(this.dyingTrailLen))
       : Math.min(this.trailCount, Math.floor(
-          Math.sqrt((this.vDeg * BASE_PPD) ** 2 + this.vY ** 2) * TRAIL_SPEED_FACTOR));
+          Math.sqrt((this.vDeg * view.ppd) ** 2 + this.vY ** 2) * TRAIL_SPEED_FACTOR));
     if (visibleLen < 2) return;
 
     for (let i = 0; i < visibleLen - 1; i++) {
       const ptA  = this.trail[(this.trailHead + i)     % MAX_TRAIL_POINTS];
       const ptB  = this.trail[(this.trailHead + i + 1) % MAX_TRAIL_POINTS];
       const t    = 1 - i / (visibleLen - 1);
-      const color = lerpColor(coolColor, warmColor, t);
-      const ax   = normalize180(ptA.deg - this.deg) * ppd;
+      const color = lerpColor(this.coolColor, this.warmColor, t);
+      const ax   = normalize180(ptA.deg - this.deg) * view.ppd;
       const ay   = ptA.y - this.y;
-      const bx   = normalize180(ptB.deg - this.deg) * ppd;
+      const bx   = normalize180(ptB.deg - this.deg) * view.ppd;
       const by   = ptB.y - this.y;
       this.trailGfx
         .moveTo(ax, ay)
@@ -428,8 +454,7 @@ export class ShuttleLayer {
   readonly container = new Container();
   private readonly shuttles: Shuttle[];
   private readonly ppd: number;
-  private warmColor = 0xffee66;
-  private coolColor = 0x88ccff;
+  private colors: ShuttleColors = { warm: 0xffee66, cool: 0x88ccff };
   private readonly explosions: Explosion[] = [];
   private readonly allDebris:  Debris[]    = [];
 
@@ -441,33 +466,36 @@ export class ShuttleLayer {
     private readonly debugToggle: { visible: boolean },
   ) {
     this.ppd      = BASE_PPD * motionScale;
-    this.shuttles = Array.from({ length: count }, () => new Shuttle(this.warmColor, this.coolColor, label));
+    this.shuttles = Array.from({ length: count }, () => new Shuttle(this.colors, label));
     for (const s of this.shuttles) this.container.addChild(s.gfx);
   }
 
-  setLightColors(warm: number, cool: number) {
-    this.warmColor = warm;
-    this.coolColor = cool;
-    for (const s of this.shuttles) s.setColors(warm, cool);
+  setLightColors(colors: ShuttleColors) {
+    this.colors = colors;
+    for (const s of this.shuttles) s.setColors(colors);
   }
 
-  private spawnAirExplosion(deg: number, y: number, vDeg: number, vY: number) {
-    const exp = new Explosion(deg, y, AIR_RING_RADIUS);
+  private spawnAirExplosion(origin: ExplosionOrigin) {
+    const exp = new Explosion(origin, AIR_RING_RADIUS);
     this.container.addChild(exp.gfx);
     this.explosions.push(exp);
 
     const count = 4 + Math.floor(Math.random() * 4); // 4–7 pieces
     for (let i = 0; i < count; i++) {
-      const dVDeg = vDeg * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.02;
-      const dVY   = vY   * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.4;
-      const debris = new Debris(deg, y, dVDeg, dVY);
+      const scattered: ExplosionOrigin = {
+        deg:  origin.deg,
+        y:    origin.y,
+        vDeg: origin.vDeg * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.02,
+        vY:   origin.vY   * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.4,
+      };
+      const debris = new Debris(scattered);
       this.container.addChild(debris.gfx);
       this.allDebris.push(debris);
     }
   }
 
-  private spawnGroundExplosion(deg: number) {
-    const exp = new Explosion(deg, SURFACE_Y, GROUND_RING_RADIUS);
+  private spawnGroundExplosion(pos: DegY) {
+    const exp = new Explosion(pos, GROUND_RING_RADIUS);
     this.container.addChild(exp.gfx);
     this.explosions.push(exp);
   }
@@ -483,76 +511,83 @@ export class ShuttleLayer {
     }
   }
 
-  update(dt: number) {
-    for (const s of this.shuttles) {
-      s.update(dt);
-      if (s.pendingExplosion) {
-        const { deg, y, vDeg, vY } = s.pendingExplosion;
-        s.pendingExplosion = null;
-        this.spawnAirExplosion(deg, y, vDeg, vY);
-      }
-    }
-
+  private tickDebris(tick: Tick): void {
     for (const d of this.allDebris) {
-      d.update(dt);
+      d.update(tick);
       if (d.landed && !d.landExplosionSpawned) {
         d.landExplosionSpawned = true;
-        this.spawnGroundExplosion(d.deg);
+        this.spawnGroundExplosion({ deg: d.deg, y: SURFACE_Y });
       }
     }
+  }
 
-    for (const e of this.explosions) e.update(dt);
-
-    // Remove finished effects and their Pixi containers
-    for (let i = this.explosions.length - 1; i >= 0; i--) {
-      if (this.explosions[i].isDone()) {
-        this.container.removeChild(this.explosions[i].gfx);
-        this.explosions.splice(i, 1);
+  private pruneList(list: Effect[]): void {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].isDone()) {
+        this.container.removeChild(list[i].gfx);
+        list.splice(i, 1);
       }
     }
-    for (let i = this.allDebris.length - 1; i >= 0; i--) {
-      if (this.allDebris[i].isDone()) {
-        this.container.removeChild(this.allDebris[i].gfx);
-        this.allDebris.splice(i, 1);
+  }
+
+  private tickExplosions(tick: Tick): void {
+    this.tickDebris(tick);
+    for (const e of this.explosions) e.update(tick);
+    this.pruneList(this.explosions);
+    this.pruneList(this.allDebris);
+  }
+
+  update(dt: number) {
+    const tick: Tick = { dt };
+    for (const s of this.shuttles) {
+      s.update(tick);
+      if (s.pendingExplosion) {
+        this.spawnAirExplosion(s.pendingExplosion);
+        s.pendingExplosion = null;
       }
+    }
+    this.tickExplosions(tick);
+  }
+
+  private layoutShuttles(view: CameraView): void {
+    for (const s of this.shuttles) {
+      s.gfx.x = normalize180(s.deg - view.cameraDeg) * view.ppd;
+      s.gfx.y = s.y;
+      s.gfx.visible = Math.abs(s.gfx.x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
+      if (s.gfx.visible) s.drawTrail(view);
+    }
+  }
+
+  private layoutExplosions(view: CameraView): void {
+    for (const e of this.explosions) {
+      e.gfx.x = normalize180(e.deg - view.cameraDeg) * view.ppd;
+      e.gfx.y = e.y;
+      e.gfx.visible = Math.abs(e.gfx.x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
+      if (e.gfx.visible) e.draw();
+    }
+  }
+
+  private layoutDebris(view: CameraView): void {
+    for (const d of this.allDebris) {
+      d.gfx.x = normalize180(d.deg - view.cameraDeg) * view.ppd;
+      d.gfx.y = d.y;
+      d.gfx.visible = Math.abs(d.gfx.x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
+      if (d.gfx.visible) d.drawTrail(view);
     }
   }
 
   layout(cameraDeg: number, zoom: number, viewWidthPx: number, cameraY: number) {
     this.container.y = -cameraY * this.yMotionScale;
-    const halfW       = viewWidthPx / 2;
-    const CULL_PAD    = 400;
-    const showCallout = this.debugToggle.visible;
-
-    for (const s of this.shuttles) {
-      const relDeg  = normalize180(s.deg - cameraDeg);
-      s.gfx.x       = relDeg * this.ppd;
-      s.gfx.y       = s.y;
-      const screenX = s.gfx.x * zoom;
-      s.gfx.visible = Math.abs(screenX) < halfW + CULL_PAD;
-      if (s.gfx.visible) {
-        s.drawTrail(cameraDeg, this.ppd, this.warmColor, this.coolColor);
-        s.setCalloutVisible(showCallout);
-      }
-    }
-
-    for (const e of this.explosions) {
-      const relDeg  = normalize180(e.deg - cameraDeg);
-      e.gfx.x       = relDeg * this.ppd;
-      e.gfx.y       = e.y;
-      const screenX = e.gfx.x * zoom;
-      e.gfx.visible = Math.abs(screenX) < halfW + CULL_PAD;
-      if (e.gfx.visible) e.draw();
-    }
-
-    for (const d of this.allDebris) {
-      const relDeg  = normalize180(d.deg - cameraDeg);
-      d.gfx.x       = relDeg * this.ppd;
-      d.gfx.y       = d.y;
-      const screenX = d.gfx.x * zoom;
-      d.gfx.visible = Math.abs(screenX) < halfW + CULL_PAD;
-      if (d.gfx.visible) d.drawTrail(this.ppd);
-    }
+    const view: CameraView = {
+      cameraDeg,
+      zoom,
+      halfW: viewWidthPx / 2,
+      ppd: this.ppd,
+      showCallout: this.debugToggle.visible,
+    };
+    this.layoutShuttles(view);
+    this.layoutExplosions(view);
+    this.layoutDebris(view);
   }
 }
 

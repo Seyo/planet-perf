@@ -12,7 +12,7 @@ import {
   HAZE_TOP_Y,
 } from "./planet/planet";
 import { makeActorLayer } from "./planet/render/actor-layer";
-import { makeShuttleLayer, ShuttleLayer } from "./planet/render/shuttle-layer";
+import { makeShuttleLayer, ShuttleLayer } from "./planet/render/actors";
 import { DebugPanel } from "./debug/debug-panel";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
 import { PALETTES, LIGHT_PALETTES, THEMES } from "./debug/palettes";
@@ -177,7 +177,7 @@ debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
 debugPanel.onLightPaletteChange = (idx) => {
   const lp = LIGHT_PALETTES[idx];
   setLightColors(lp.warmColor, lp.coolColor);
-  for (const sl of shuttleLayers) sl.setLightColors(lp.warmColor, lp.coolColor);
+  for (const sl of shuttleLayers) sl.setLightColors({ warm: lp.warmColor, cool: lp.coolColor });
   for (const layer of bakedLayers) {
     for (const slice of layer.ring.slices) {
       slice.updateCacheTexture();
@@ -188,7 +188,7 @@ debugPanel.onThemeChange = (paletteIdx, lightPaletteIdx) => {
   applyPalette(PALETTES[paletteIdx]);
   const lp = LIGHT_PALETTES[lightPaletteIdx];
   setLightColors(lp.warmColor, lp.coolColor);
-  for (const sl of shuttleLayers) sl.setLightColors(lp.warmColor, lp.coolColor);
+  for (const sl of shuttleLayers) sl.setLightColors({ warm: lp.warmColor, cool: lp.coolColor });
   for (const layer of bakedLayers) {
     for (const slice of layer.ring.slices) {
       slice.updateCacheTexture();
