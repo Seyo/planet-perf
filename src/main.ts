@@ -11,6 +11,7 @@ import {
   HAZE_TOP_Y,
 } from "./planet/planet";
 import { makeActorLayer } from "./planet/render/actor-layer";
+import { makeShuttleLayer, ShuttleLayer } from "./planet/render/shuttle-layer";
 import { DebugPanel } from "./debug/debug-panel";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
 import { PALETTES, LIGHT_PALETTES } from "./debug/palettes";
@@ -22,6 +23,7 @@ const DEFAULT_PALETTE_IDX = PALETTES.findIndex(p => p.name === 'Sunrise');
 
 const app = new Application();
 await app.init({
+  preference: 'webgl',
   resizeTo: window,
   antialias: true,
   resolution: window.devicePixelRatio,
@@ -48,6 +50,8 @@ const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 type HazeEntry = { container: Container; alpha: number; underground: boolean };
 const hazeEntries: HazeEntry[] = [];
 const bakedLayers: SliceLayer[] = [];
+const shuttleLayers: ShuttleLayer[] = [];
+const shuttleDebugToggle = { visible: false };
 
 for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   const t           = BACK_LAYER_COUNT > 1 ? i / (BACK_LAYER_COUNT - 1) : 0;
@@ -63,6 +67,11 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   planet.addLayer(backLayer, { behindAll: true });
   if (i >= ACTOR_LAYER_START) {
     planet.addActorLayer(makeActorLayer(motionScale, motionScale));
+  }
+  if (i >= ACTOR_LAYER_START && i < BACK_LAYER_COUNT - 5) {
+    const sl = makeShuttleLayer(motionScale, motionScale, String(i), shuttleDebugToggle);
+    shuttleLayers.push(sl);
+    planet.addActorLayer(sl);
   }
 
   const hazeAlpha = 0.30 - t * 0.24;
@@ -101,10 +110,12 @@ debugPanel.setActivePalette(DEFAULT_PALETTE_IDX);
 // Standalone debug line — lives inside the sky layer so it follows its y-parallax.
 // Re-parented in applyPalette whenever the sky layer is replaced.
 const skyBottomLine = new Graphics().rect(-5000, 4, 10000, 2).fill(0xff0000);
+skyBottomLine.visible = false;
 activeSkyLayer.container.addChild(skyBottomLine);
-debugPanel.registerToggle('sky-bottom',  'Sky bottom edge', skyBottomLine);
-debugPanel.registerToggle('slice-lines', 'Slice lines',     sliceOverlay.container);
-debugPanel.registerToggle('y-grid',      'Y grid',          yGridOverlay.container);
+debugPanel.registerToggle('sky-bottom',    'Sky bottom edge', skyBottomLine);
+debugPanel.registerToggle('slice-lines',  'Slice lines',     sliceOverlay.container);
+debugPanel.registerToggle('y-grid',       'Y grid',          yGridOverlay.container);
+debugPanel.registerToggle('shuttle-info', 'Shuttle info',    shuttleDebugToggle);
 
 function applyPalette(p: Palette): void {
   app.renderer.background.color = p.backgroundColor;
@@ -129,6 +140,7 @@ debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
 debugPanel.onLightPaletteChange = (idx) => {
   const lp = LIGHT_PALETTES[idx];
   setLightColors(lp.warmColor, lp.coolColor);
+  for (const sl of shuttleLayers) sl.setLightColors(lp.warmColor, lp.coolColor);
   for (const layer of bakedLayers) {
     for (const slice of layer.ring.slices) {
       slice.updateCacheTexture();
