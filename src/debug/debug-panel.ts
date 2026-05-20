@@ -28,15 +28,15 @@ export class DebugPanel {
   private el: HTMLDivElement;
   private valueEls: Record<string, HTMLSpanElement> = {};
   private lastText: Record<string, string> = {};
-  private btnEls: HTMLButtonElement[] = [];
   private palettes: Palette[] = [];
   private activeIdx = 0;
-  private lightBtnEls: HTMLButtonElement[] = [];
+  private paletteButtons = new Map<number, HTMLButtonElement>();
   private lightPalettes: LightPalette[] = [];
   private activeLightIdx = 0;
+  private lightButtons = new Map<number, HTMLButtonElement>();
   private themes: Theme[] = [];
   private activeThemeIdx = -1;
-  private themeBtnEls: HTMLButtonElement[] = [];
+  private themeButtons = new Map<number, HTMLButtonElement>();
   private togglesWrap!: HTMLElement;
   private toggles: Map<string, Toggle> = new Map();
 
@@ -265,18 +265,16 @@ export class DebugPanel {
     return wrap;
   }
 
-  private makePaletteButtons(palettes: Palette[]): HTMLElement {
-    const wrap = document.createElement('div');
-    Object.assign(wrap.style, {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: '4px',
-    });
-
-    palettes.forEach((p, i) => {
+  private makeButtonGroup<T>(
+    items: { key: T; label: string }[],
+    onSelect: (key: T) => void,
+  ): { row: HTMLElement; buttons: Map<T, HTMLButtonElement> } {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', flexWrap: 'wrap', gap: '4px' });
+    const buttons = new Map<T, HTMLButtonElement>();
+    for (const item of items) {
       const btn = document.createElement('button');
-      btn.textContent = p.name;
-
+      btn.textContent = item.label;
       Object.assign(btn.style, {
         cursor: 'pointer',
         fontFamily: 'monospace',
@@ -286,34 +284,39 @@ export class DebugPanel {
         color: '#fff',
         transition: 'none',
       });
+      btn.addEventListener('click', () => onSelect(item.key));
+      buttons.set(item.key, btn);
+      row.appendChild(btn);
+    }
+    return { row, buttons };
+  }
 
-      btn.addEventListener('click', () => {
-        this.setActivePalette(i);
-        this.onPaletteChange?.(i);
-      });
+  private refreshButtonGroup<T>(
+    buttons: Map<T, HTMLButtonElement>,
+    activeKey: T,
+    getStyle: (key: T, isActive: boolean) => { background: string; border: string },
+  ): void {
+    for (const [key, btn] of buttons) {
+      Object.assign(btn.style, getStyle(key, key === activeKey));
+    }
+  }
 
-      this.btnEls.push(btn);
-      wrap.appendChild(btn);
-    });
-
+  private makePaletteButtons(palettes: Palette[]): HTMLElement {
+    const { row, buttons } = this.makeButtonGroup(
+      palettes.map((p, i) => ({ key: i, label: p.name })),
+      (i) => { this.setActivePalette(i); this.onPaletteChange?.(i); },
+    );
+    this.paletteButtons = buttons;
     this.refreshButtonStyles();
-    return wrap;
+    return row;
   }
 
   private refreshButtonStyles(): void {
-    this.btnEls.forEach((btn, i) => {
-      const p = this.palettes[i];
-      if (i === this.activeIdx) {
-        Object.assign(btn.style, {
-          background: hexToCss(p.hazeColor, 0.75),
-          border: `1px solid ${hexToCss(p.hazeColor, 1.0)}`,
-        });
-      } else {
-        Object.assign(btn.style, {
-          background: hexToCss(p.hazeColor, 0.28),
-          border: `1px solid ${hexToCss(p.hazeColor, 0.55)}`,
-        });
-      }
+    this.refreshButtonGroup(this.paletteButtons, this.activeIdx, (i, active) => {
+      const c = this.palettes[i].hazeColor;
+      return active
+        ? { background: hexToCss(c, 0.75), border: `1px solid ${hexToCss(c, 1.0)}` }
+        : { background: hexToCss(c, 0.28), border: `1px solid ${hexToCss(c, 0.55)}` };
     });
   }
 
@@ -323,54 +326,21 @@ export class DebugPanel {
   }
 
   private makeLightPaletteButtons(palettes: LightPalette[]): HTMLElement {
-    const wrap = document.createElement('div');
-    Object.assign(wrap.style, {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: '4px',
-    });
-
-    palettes.forEach((p, i) => {
-      const btn = document.createElement('button');
-      btn.textContent = p.name;
-
-      Object.assign(btn.style, {
-        cursor: 'pointer',
-        fontFamily: 'monospace',
-        fontSize: '10px',
-        padding: '2px 6px',
-        borderRadius: '3px',
-        color: '#fff',
-        transition: 'none',
-      });
-
-      btn.addEventListener('click', () => {
-        this.setActiveLightPalette(i);
-        this.onLightPaletteChange?.(i);
-      });
-
-      this.lightBtnEls.push(btn);
-      wrap.appendChild(btn);
-    });
-
+    const { row, buttons } = this.makeButtonGroup(
+      palettes.map((p, i) => ({ key: i, label: p.name })),
+      (i) => { this.setActiveLightPalette(i); this.onLightPaletteChange?.(i); },
+    );
+    this.lightButtons = buttons;
     this.refreshLightButtonStyles();
-    return wrap;
+    return row;
   }
 
   private refreshLightButtonStyles(): void {
-    this.lightBtnEls.forEach((btn, i) => {
-      const p = this.lightPalettes[i];
-      if (i === this.activeLightIdx) {
-        Object.assign(btn.style, {
-          background: hexToCss(p.warmColor, 0.55),
-          border: `1px solid ${hexToCss(p.warmColor, 1.0)}`,
-        });
-      } else {
-        Object.assign(btn.style, {
-          background: hexToCss(p.warmColor, 0.18),
-          border: `1px solid ${hexToCss(p.warmColor, 0.45)}`,
-        });
-      }
+    this.refreshButtonGroup(this.lightButtons, this.activeLightIdx, (i, active) => {
+      const c = this.lightPalettes[i].warmColor;
+      return active
+        ? { background: hexToCss(c, 0.55), border: `1px solid ${hexToCss(c, 1.0)}` }
+        : { background: hexToCss(c, 0.18), border: `1px solid ${hexToCss(c, 0.45)}` };
     });
   }
 
@@ -378,23 +348,10 @@ export class DebugPanel {
     const wrap = document.createElement('div');
     Object.assign(wrap.style, { display: 'flex', flexDirection: 'column', gap: '6px' });
 
-    const btnRow = document.createElement('div');
-    Object.assign(btnRow.style, { display: 'flex', flexWrap: 'wrap', gap: '4px' });
-
-    themes.forEach((t, i) => {
-      const btn = document.createElement('button');
-      btn.textContent = t.name;
-      Object.assign(btn.style, {
-        cursor: 'pointer',
-        fontFamily: 'monospace',
-        fontSize: '10px',
-        padding: '2px 6px',
-        borderRadius: '3px',
-        color: '#fff',
-        transition: 'none',
-      });
-
-      btn.addEventListener('click', () => {
+    const { row: btnRow, buttons } = this.makeButtonGroup(
+      themes.map((t, i) => ({ key: i, label: t.name })),
+      (i) => {
+        const t = this.themes[i];
         this.activeThemeIdx = i;
         this.setActivePalette(t.paletteIdx);
         this.setActiveLightPalette(t.lightPaletteIdx);
@@ -402,12 +359,9 @@ export class DebugPanel {
         this.onPaletteChange?.(t.paletteIdx);
         this.onLightPaletteChange?.(t.lightPaletteIdx);
         this.onThemeChange?.(t.paletteIdx, t.lightPaletteIdx);
-      });
-
-      this.themeBtnEls.push(btn);
-      btnRow.appendChild(btn);
-    });
-
+      },
+    );
+    this.themeButtons = buttons;
     this.refreshThemeButtonStyles();
 
     const copyBtn = document.createElement('button');
@@ -439,21 +393,13 @@ export class DebugPanel {
   }
 
   private refreshThemeButtonStyles(): void {
-    this.themeBtnEls.forEach((btn, i) => {
+    this.refreshButtonGroup(this.themeButtons, this.activeThemeIdx, (i, active) => {
       const t = this.themes[i];
-      const p = this.palettes[t.paletteIdx];
-      const lp = this.lightPalettes[t.lightPaletteIdx];
-      if (i === this.activeThemeIdx) {
-        Object.assign(btn.style, {
-          background: hexToCss(p.hazeColor, 0.55),
-          border: `1px solid ${hexToCss(lp.warmColor, 1.0)}`,
-        });
-      } else {
-        Object.assign(btn.style, {
-          background: hexToCss(p.hazeColor, 0.22),
-          border: `1px solid ${hexToCss(lp.warmColor, 0.45)}`,
-        });
-      }
+      const c = this.palettes[t.paletteIdx].hazeColor;
+      const lc = this.lightPalettes[t.lightPaletteIdx].warmColor;
+      return active
+        ? { background: hexToCss(c, 0.55), border: `1px solid ${hexToCss(lc, 1.0)}` }
+        : { background: hexToCss(c, 0.22), border: `1px solid ${hexToCss(lc, 0.45)}` };
     });
   }
 
