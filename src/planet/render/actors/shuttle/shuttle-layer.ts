@@ -1,9 +1,10 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { normalize180, clamp, lerpColor } from "../../../math";
-import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, type FlightConfig } from './physics';
+import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, type FlightConfig, type ExplosionConfig } from './physics';
 
 const BASE_PPD = 24;
 const SURFACE_Y = -2;
+const FIZZLE_FADE_FRAMES = 20;
 const LAYOUT_CULL_PAD = 400;
 
 // Callout geometry (world-space units)
@@ -40,13 +41,28 @@ type CalloutConfig = { label: string };
 // Common interface for pruneable effects (explosions, debris).
 type Effect = { isDone(): boolean; gfx: Container };
 
+// Per-piece randomised properties resolved from ExplosionConfig at spawn time.
+type DebrisPieceConfig = {
+  fizzleFrames: number | null; // frames until in-air fade-out; null = reaches ground
+  intensity:    number;        // scales glow and core alpha
+  trailWidth:   number;        // core line width in px
+};
+
 // Maps trail freshness t (1=fresh tip, 0=old tail) → fire/smoke color.
-// Fire is only the top ~25% near the debris; the rest quickly becomes dark smoke.
+// Only the top ~28% glows; the rest is near-black debris smoke.
 function getDebrisTrailColor(t: number): number {
-  if (t > 0.85) return lerpColor(0xffdd00, 0xffffff, (t - 0.85) / 0.15); // white→yellow
-  if (t > 0.72) return lerpColor(0xff2200, 0xffdd00, (t - 0.72) / 0.13); // yellow→red
-  if (t > 0.60) return lerpColor(0x222222, 0xff2200, (t - 0.60) / 0.12); // red→dark
-  return 0x222222; // smoke (bottom 60% of trail)
+  if (t > 0.92) return lerpColor(0xffdd00, 0xffffff, (t - 0.92) / 0.08); // white→yellow
+  if (t > 0.80) return lerpColor(0xff2200, 0xffdd00, (t - 0.80) / 0.12); // yellow→red
+  if (t > 0.72) return lerpColor(0x080808, 0xff2200, (t - 0.72) / 0.08); // red→black
+  return 0x080808;
+}
+
+// Bloom glow multiplier for the hot zone; 0 outside it.
+// Fades toward zero as t approaches the red end (more transparent = more red).
+function getDebrisGlowAlpha(t: number): number {
+  if (t <= 0.72) return 0;
+  const ht = (t - 0.72) / 0.28;
+  return ht * ht * 0.4;
 }
 
 function makeCallout(config: CalloutConfig): Container {
@@ -133,9 +149,14 @@ class Debris {
   y: number;
   vDeg: number;
   vY: number;
-  landed              = false;
+  landed               = false;
+  fizzled              = false;
   landExplosionSpawned = false;
-  private lingerTick  = 0;
+  private lingerTick   = 0;
+  private age          = 0;
+  private readonly fizzleFrames: number | null;
+  private readonly intensity: number;
+  private readonly trailWidth: number;
   private readonly trail: Array<{ deg: number; y: number }>;
   private trailHead  = 0;
   private trailCount = 0;
@@ -143,11 +164,14 @@ class Debris {
   private readonly trailGfx: Graphics;
   private readonly bodyGfx: Graphics;
 
-  constructor(origin: ExplosionOrigin) {
-    this.deg  = origin.deg;
-    this.y    = origin.y;
-    this.vDeg = origin.vDeg;
-    this.vY   = origin.vY;
+  constructor(origin: ExplosionOrigin, piece: DebrisPieceConfig) {
+    this.deg          = origin.deg;
+    this.y            = origin.y;
+    this.vDeg         = origin.vDeg;
+    this.vY           = origin.vY;
+    this.fizzleFrames = piece.fizzleFrames;
+    this.intensity    = piece.intensity;
+    this.trailWidth   = piece.trailWidth;
     this.trail = Array.from(
       { length: DEFAULT_EXPLOSION_CONFIG.debrisTrailPoints },
       () => ({ deg: 0, y: 0 }),
@@ -165,6 +189,14 @@ class Debris {
   update(tick: Tick) {
     if (this.landed) {
       this.lingerTick += tick.dt;
+      return;
+    }
+
+    this.age += tick.dt;
+    if (this.fizzleFrames !== null && this.age >= this.fizzleFrames) {
+      this.landed          = true;
+      this.fizzled         = true;
+      this.bodyGfx.visible = false;
       return;
     }
 
@@ -191,32 +223,41 @@ class Debris {
     this.trailGfx.clear();
     if (this.trailCount < 2) return;
 
-    const linger    = this.landed
+    // lingerProgress (0→1) acts as a shared age offset: every particle ages by
+    // this amount each linger tick, so the oldest end reaches t=0 first and the
+    // trail dissolves tip-to-tail — the same particle-by-particle behaviour as flight.
+    const lingerProgress = this.landed
       ? clamp(this.lingerTick / DEFAULT_EXPLOSION_CONFIG.debrisLingerFrames, 0, 1)
       : 0;
-    const fadeAlpha = 1 - linger;
-    if (fadeAlpha <= 0) return;
+    if (lingerProgress >= 1) return;
+
+    const fizzleAt = this.fizzleFrames ?? Infinity;
+    const tipFade  = clamp((fizzleAt - this.age) / FIZZLE_FADE_FRAMES, 0, 1);
+    this.bodyGfx.alpha = (1 - lingerProgress) * tipFade;
 
     const len    = this.trail.length;
     const visLen = this.trailCount;
+    const tScale = Math.max(1, visLen - 1);
     for (let i = 0; i < visLen - 1; i++) {
-      const ptA = this.trail[(this.trailHead + i)     % len];
-      const ptB = this.trail[(this.trailHead + i + 1) % len];
-      const t   = 1 - i / (visLen - 1);
-
+      const spawnFade = clamp((fizzleAt - this.age + i) / FIZZLE_FADE_FRAMES, 0, 1);
+      const ptA  = this.trail[(this.trailHead + i)     % len];
+      const ptB  = this.trail[(this.trailHead + i + 1) % len];
+      const t    = Math.max(0, 1 - i / tScale - lingerProgress);
       const color = getDebrisTrailColor(t);
+      const ax   = normalize180(ptA.deg - this.deg) * view.ppd;
+      const ay   = ptA.y - this.y;
+      const bx   = normalize180(ptB.deg - this.deg) * view.ppd;
+      const by   = ptB.y - this.y;
 
-      const ax = normalize180(ptA.deg - this.deg) * view.ppd;
-      const ay = ptA.y - this.y;
-      const bx = normalize180(ptB.deg - this.deg) * view.ppd;
-      const by = ptB.y - this.y;
-
-      const alpha = fadeAlpha * t;
-
+      const glow = getDebrisGlowAlpha(t) * spawnFade * this.intensity;
+      if (glow > 0.005) {
+        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color, alpha: glow * 0.2,  width: 12 });
+        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color, alpha: glow * 0.45, width: 5  });
+      }
       this.trailGfx
         .moveTo(ax, ay)
         .lineTo(bx, by)
-        .stroke({ color, alpha, width: 1 });
+        .stroke({ color, alpha: Math.min(t * spawnFade * this.intensity, 1), width: this.trailWidth });
     }
   }
 
@@ -495,17 +536,21 @@ export class ShuttleLayer {
     for (const s of this.shuttles) this.container.addChild(s.gfx);
   }
 
+  get layerPpd():          number { return this.ppd; }
+  get layerYMotionScale(): number { return this.yMotionScale; }
+
   setLightColors(colors: ShuttleColors) {
     this.colors = colors;
     for (const s of this.shuttles) s.setColors(colors);
   }
 
-  private spawnAirExplosion(origin: ExplosionOrigin) {
-    const exp = new Explosion(origin, DEFAULT_EXPLOSION_CONFIG.airRingRadius);
+  private spawnAirExplosion(origin: ExplosionOrigin, cfg = DEFAULT_EXPLOSION_CONFIG) {
+    const exp = new Explosion(origin, cfg.airRingRadius);
     this.container.addChild(exp.gfx);
     this.explosions.push(exp);
 
-    const count = 4 + Math.floor(Math.random() * 4); // 4–7 pieces
+    const count = cfg.debrisCountMin
+      + Math.floor(Math.random() * (cfg.debrisCountMax - cfg.debrisCountMin + 1));
     for (let i = 0; i < count; i++) {
       const scattered: ExplosionOrigin = {
         deg:  origin.deg,
@@ -513,7 +558,18 @@ export class ShuttleLayer {
         vDeg: origin.vDeg * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.02,
         vY:   origin.vY   * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.4,
       };
-      const debris = new Debris(scattered);
+      const willFizzle = Math.random() < cfg.debrisFizzleChance;
+      const piece: DebrisPieceConfig = {
+        fizzleFrames: willFizzle
+          ? cfg.debrisFizzleFramesMin
+            + Math.random() * (cfg.debrisFizzleFramesMax - cfg.debrisFizzleFramesMin)
+          : null,
+        intensity:  cfg.debrisIntensityMin
+          + Math.random() * (cfg.debrisIntensityMax - cfg.debrisIntensityMin),
+        trailWidth: cfg.debrisTrailWidthMin
+          + Math.random() * (cfg.debrisTrailWidthMax - cfg.debrisTrailWidthMin),
+      };
+      const debris = new Debris(scattered, piece);
       this.container.addChild(debris.gfx);
       this.allDebris.push(debris);
     }
@@ -536,10 +592,21 @@ export class ShuttleLayer {
     }
   }
 
+  annihilate(): void {
+    for (const s of this.shuttles) {
+      if (s.isFlying) s.triggerExplosion();
+    }
+  }
+
+  spawnExplosionAt(deg: number, y: number, cfg: ExplosionConfig): void {
+    this.spawnAirExplosion({ deg, y, vDeg: 0, vY: 0 }, cfg);
+  }
+
   private tickDebris(tick: Tick): void {
     for (const d of this.allDebris) {
       d.update(tick);
-      if (d.landed && !d.landExplosionSpawned) {
+      const needsGroundBlast = d.landed && !d.fizzled && !d.landExplosionSpawned;
+      if (needsGroundBlast) {
         d.landExplosionSpawned = true;
         this.spawnGroundExplosion({ deg: d.deg, y: SURFACE_Y });
       }

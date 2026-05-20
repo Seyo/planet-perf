@@ -44,6 +44,8 @@ export class DebugPanel {
   onAutopanChange?: (degPerTick: number) => void;
   onLightPaletteChange?: (idx: number) => void;
   onThemeChange?: (paletteIdx: number, lightPaletteIdx: number) => void;
+  onAnnihilate?: () => void;
+  onExplosionTesterToggle?: () => void;
 
   constructor(palettes: Palette[], lightPalettes: LightPalette[], themes: Theme[] = []) {
     this.palettes = palettes;
@@ -81,6 +83,8 @@ export class DebugPanel {
     this.el.appendChild(this.makeColumn('PALETTE',  this.makePaletteButtons(palettes), '', false));
     this.el.appendChild(this.makeDivider());
     this.el.appendChild(this.makeColumn('LIGHTS',   this.makeLightPaletteButtons(lightPalettes)));
+    this.el.appendChild(this.makeDivider());
+    this.el.appendChild(this.makeColumn('ACTIONS',  this.makeActionsSection()));
     this.el.appendChild(this.makeDivider());
     this.el.appendChild(this.makeColumn('THEME',    this.makeThemeSection(themes), '', true));
 
@@ -401,6 +405,33 @@ export class DebugPanel {
         ? { background: hexToCss(c, 0.55), border: `1px solid ${hexToCss(lc, 1.0)}` }
         : { background: hexToCss(c, 0.22), border: `1px solid ${hexToCss(lc, 0.45)}` };
     });
+  }
+
+  private makeActionsSection(): HTMLElement {
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, { display: 'flex', flexDirection: 'column', gap: '4px' });
+
+    const annBtn = document.createElement('button');
+    annBtn.textContent = 'Annihilate';
+    Object.assign(annBtn.style, {
+      cursor: 'pointer', fontFamily: 'monospace', fontSize: '10px',
+      padding: '2px 8px', borderRadius: '3px', transition: 'none',
+      color: '#ff5555', background: 'rgba(255,60,60,0.12)', border: '1px solid rgba(255,60,60,0.4)',
+    });
+    annBtn.addEventListener('click', () => this.onAnnihilate?.());
+
+    const testerBtn = document.createElement('button');
+    testerBtn.textContent = 'Explosion tester';
+    Object.assign(testerBtn.style, {
+      cursor: 'pointer', fontFamily: 'monospace', fontSize: '10px',
+      padding: '2px 8px', borderRadius: '3px', transition: 'none',
+      color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
+    });
+    testerBtn.addEventListener('click', () => this.onExplosionTesterToggle?.());
+
+    wrap.appendChild(annBtn);
+    wrap.appendChild(testerBtn);
+    return wrap;
   }
 
   private buildThemePrompt(): string {
