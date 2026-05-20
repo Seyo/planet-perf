@@ -15,6 +15,7 @@ import { makeActorLayer } from "./planet/render/actor-layer";
 import { makeShuttleLayer, ShuttleLayer } from "./planet/render/actors";
 import { DebugPanel } from "./debug/debug-panel";
 import { ExplosionTesterPanel } from "./debug/explosion-tester";
+import { ShuttleTesterPanel }   from "./debug/shuttle-tester";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
 import { PALETTES, LIGHT_PALETTES, THEMES } from "./debug/palettes";
 import type { Palette } from "./debug/palettes";
@@ -174,29 +175,35 @@ function applyPalette(p: Palette): void {
 }
 
 const explosionTester = new ExplosionTesterPanel();
-// Use the frontmost shuttle layer for click-to-world mapping and spawning.
-// Its ppd and yMotionScale are the correct parallax basis for the conversion.
+const shuttleTester   = new ShuttleTesterPanel();
+
+// Frontmost shuttle layer — its ppd/yMotionScale are the correct parallax basis.
 const testerLayer = shuttleLayers[shuttleLayers.length - 1];
 explosionTester.onSpawn = (deg, y, cfg) => testerLayer.spawnExplosionAt(deg, y, cfg);
+shuttleTester.onSpawn   = (deg, cfg) => testerLayer.spawnShuttleAt(deg, cfg);
+shuttleTester.onClear   = ()         => { for (const sl of shuttleLayers) sl.clearShuttles(); };
+
+const updateCursor = () => {
+  app.canvas.style.cursor =
+    explosionTester.isVisible || shuttleTester.isVisible ? 'crosshair' : '';
+};
 
 app.canvas.addEventListener('click', (e) => {
-  if (!explosionTester.isVisible) return;
+  if (!explosionTester.isVisible && !shuttleTester.isVisible) return;
   const rect = app.canvas.getBoundingClientRect();
   const dpr  = window.devicePixelRatio;
   const cx   = (e.clientX - rect.left) * dpr;
   const cy   = (e.clientY - rect.top)  * dpr;
   const zoom = planet.zoomLevel;
-  explosionTester.spawnAt(
-    planet.xDeg + (cx - app.renderer.width / 2) / (testerLayer.layerPpd * zoom),
-    cy / zoom + planet.cameraY * testerLayer.layerYMotionScale,
-  );
+  const deg  = planet.xDeg + (cx - app.renderer.width / 2) / (testerLayer.layerPpd * zoom);
+  const y    = cy / zoom + planet.cameraY * testerLayer.layerYMotionScale;
+  if (explosionTester.isVisible) explosionTester.spawnAt(deg, y);
+  if (shuttleTester.isVisible)   shuttleTester.spawnAt(deg, y);
 });
 
 debugPanel.onAnnihilate = () => { for (const sl of shuttleLayers) sl.annihilate(); };
-debugPanel.onExplosionTesterToggle = () => {
-  explosionTester.toggle();
-  app.canvas.style.cursor = explosionTester.isVisible ? 'crosshair' : '';
-};
+debugPanel.onExplosionTesterToggle = () => { explosionTester.toggle(); updateCursor(); };
+debugPanel.onShuttleTesterToggle   = () => { shuttleTester.toggle();   updateCursor(); };
 debugPanel.onPaletteChange = (idx) => applyPalette(PALETTES[idx]);
 debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
 debugPanel.onLightPaletteChange = (idx) => {

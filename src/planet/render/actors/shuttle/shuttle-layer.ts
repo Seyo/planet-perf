@@ -65,6 +65,12 @@ function getDebrisGlowAlpha(t: number): number {
   return ht * ht * 0.4;
 }
 
+// Shuttle trail glow — strongest at the warm engine tip, zero below the midpoint.
+function getShuttleGlowAlpha(t: number): number {
+  const hot = Math.max(0, t - 0.5) / 0.5;
+  return hot * hot * 0.3;
+}
+
 function makeCallout(config: CalloutConfig): Container {
   const c = new Container();
 
@@ -291,6 +297,7 @@ class Shuttle {
   private willExplode      = false;
   private dyingTrailLen    = 0;
   private dyingTrailMax    = 0;
+  private flyingFrames     = 0;
   public pendingExplosion: ExplosionOrigin | null = null;
   private readonly trail: Array<{ deg: number; y: number; vDeg: number }>;
   private trailHead  = 0;
@@ -301,10 +308,11 @@ class Shuttle {
     return this.phase !== 'grounded' && this.phase !== 'dying';
   }
 
-  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG) {
+  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, startDeg?: number) {
     this.config    = config;
-    this.deg       = Math.random() * 360;
-    this.halfLen   = 3 + Math.random() * 2;
+    this.deg       = startDeg ?? Math.random() * 360;
+    this.halfLen   = config.bodyHalfLenMin
+      + Math.random() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
     this.maxSpeed  = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
     this.warmColor = colors.warm;
     this.coolColor = colors.cool;
@@ -315,7 +323,8 @@ class Shuttle {
     this.trailGfx  = new Graphics();
 
     const body   = new Graphics().rect(-this.halfLen, -0.5, this.halfLen * 2, 1).fill(0x222233);
-    this.engGlow = new Graphics().circle(-this.halfLen, 0, 2).fill({ color: colors.warm, alpha: 0.25 });
+    this.engGlow = new Graphics().circle(-this.halfLen, 0, 2)
+      .fill({ color: colors.warm, alpha: Math.min(0.25 * config.engineIntensity, 0.9) });
     const nose   = new Graphics().circle(this.halfLen, 0, 0.5).fill(colors.cool);
     this.bodyGfx = new Container();
     this.bodyGfx.addChild(body, this.engGlow, nose);
@@ -332,7 +341,8 @@ class Shuttle {
     this.warmColor = colors.warm;
     this.coolColor = colors.cool;
     this.engGlow.clear();
-    this.engGlow.circle(-this.halfLen, 0, 2).fill({ color: colors.warm, alpha: 0.25 });
+    this.engGlow.circle(-this.halfLen, 0, 2)
+      .fill({ color: colors.warm, alpha: Math.min(0.25 * this.config.engineIntensity, 0.9) });
   }
 
   private startWait() {
@@ -340,6 +350,7 @@ class Shuttle {
     this.vDeg             = 0;
     this.vY               = 0;
     this.y                = SURFACE_Y;
+    this.flyingFrames     = 0;
     this.waitTicks        = this.config.waitTicksMin
       + Math.floor(Math.random() * (this.config.waitTicksMax - this.config.waitTicksMin));
     this.trailHead        = 0;
@@ -355,7 +366,7 @@ class Shuttle {
     this.cruiseDegLimit = this.config.cruiseDegMin
       + Math.random() * (this.config.cruiseDegMax - this.config.cruiseDegMin);
     this.traveledDeg    = 0;
-    this.willExplode    = Math.random() < 0.25;
+    this.willExplode    = Math.random() < this.config.explodeChance;
     this.phase          = 'ascending';
   }
 
@@ -459,7 +470,15 @@ class Shuttle {
     return false;
   }
 
+  private checkExplodeAfterFrames(): boolean {
+    return this.config.explodeAfterFrames > 0
+      && this.flyingFrames >= this.config.explodeAfterFrames;
+  }
+
   private updateFlying(tick: Tick): void {
+    this.flyingFrames += tick.dt;
+    if (this.checkExplodeAfterFrames()) { this.triggerExplosion(); return; }
+
     this.applyPhysics(tick);
 
     if (this.phase === 'ascending' && Math.abs(this.y - this.cruiseY) < this.config.levelThreshold) {
@@ -481,15 +500,19 @@ class Shuttle {
     this.updateFlying(tick);
   }
 
+  private computeDyingFade(): number {
+    return this.phase === 'dying' && this.dyingTrailMax > 0
+      ? this.dyingTrailLen / this.dyingTrailMax
+      : 1;
+  }
+
   drawTrail(view: CameraView) {
     this.callout.visible = view.showCallout;
     this.trailGfx.clear();
     if (this.phase === 'grounded' || this.trailCount < 2) return;
 
-    const dying = this.phase === 'dying';
-    const dyingFade = dying && this.dyingTrailMax > 0
-      ? this.dyingTrailLen / this.dyingTrailMax
-      : 1;
+    const dying      = this.phase === 'dying';
+    const dyingFade  = this.computeDyingFade();
     const visibleLen = dying
       ? Math.max(0, Math.ceil(this.dyingTrailLen))
       : Math.min(this.trailCount, Math.floor(
@@ -506,6 +529,12 @@ class Shuttle {
       const ay   = ptA.y - this.y;
       const bx   = normalize180(ptB.deg - this.deg) * view.ppd;
       const by   = ptB.y - this.y;
+
+      const glow = getShuttleGlowAlpha(t) * this.config.engineIntensity * dyingFade;
+      if (glow > 0.005) {
+        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color: this.warmColor, alpha: glow * 0.2,  width: 12 });
+        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color: this.warmColor, alpha: glow * 0.45, width: 5  });
+      }
       this.trailGfx
         .moveTo(ax, ay)
         .lineTo(bx, by)
@@ -600,6 +629,20 @@ export class ShuttleLayer {
 
   spawnExplosionAt(deg: number, y: number, cfg: ExplosionConfig): void {
     this.spawnAirExplosion({ deg, y, vDeg: 0, vY: 0 }, cfg);
+  }
+
+  spawnShuttleAt(deg: number, cfg: FlightConfig): void {
+    const s = new Shuttle(this.colors, 'tester', cfg, deg);
+    this.shuttles.push(s);
+    this.container.addChild(s.gfx);
+  }
+
+  clearShuttles(): void {
+    for (const s of this.shuttles) {
+      this.container.removeChild(s.gfx);
+      s.gfx.destroy({ children: true });
+    }
+    this.shuttles.length = 0;
   }
 
   private tickDebris(tick: Tick): void {

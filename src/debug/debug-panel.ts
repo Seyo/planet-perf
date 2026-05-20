@@ -46,6 +46,7 @@ export class DebugPanel {
   onThemeChange?: (paletteIdx: number, lightPaletteIdx: number) => void;
   onAnnihilate?: () => void;
   onExplosionTesterToggle?: () => void;
+  onShuttleTesterToggle?:  () => void;
 
   constructor(palettes: Palette[], lightPalettes: LightPalette[], themes: Theme[] = []) {
     this.palettes = palettes;
@@ -429,8 +430,18 @@ export class DebugPanel {
     });
     testerBtn.addEventListener('click', () => this.onExplosionTesterToggle?.());
 
+    const shuttleBtn = document.createElement('button');
+    shuttleBtn.textContent = 'Shuttle tester';
+    Object.assign(shuttleBtn.style, {
+      cursor: 'pointer', fontFamily: 'monospace', fontSize: '10px',
+      padding: '2px 8px', borderRadius: '3px', transition: 'none',
+      color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
+    });
+    shuttleBtn.addEventListener('click', () => this.onShuttleTesterToggle?.());
+
     wrap.appendChild(annBtn);
     wrap.appendChild(testerBtn);
+    wrap.appendChild(shuttleBtn);
     return wrap;
   }
 
