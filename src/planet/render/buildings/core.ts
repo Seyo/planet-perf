@@ -120,7 +120,12 @@ export type BridgeOpts = {
   lightCount?:    [number, number];
 };
 
-export type GreebleCtx = { sliceW: number; yBase: number };
+export type SliceContext = {
+  canvas: BuildingCanvas;
+  rng:    RNG;
+  sliceW: number;
+  yBase:  number;
+};
 
 // ---------- canvas lifecycle ----------
 
@@ -535,22 +540,19 @@ export function drawBuilding(
 // ---------- compound: slice-level features ----------
 
 export function drawStreetLamps(
-  canvas: BuildingCanvas,
-  rng: RNG,
-  sliceW: number,
-  yBase: number,
+  ctx: SliceContext,
   opts: { chanceP?: number; countRange?: [number, number] } = {},
 ): void {
   const { chanceP = 0.65, countRange = [1, 2] } = opts;
-  if (!chance(rng, chanceP)) return;
+  if (!chance(ctx.rng, chanceP)) return;
 
-  const count = randInt(rng, countRange[0], countRange[1]);
+  const count = randInt(ctx.rng, countRange[0], countRange[1]);
   for (let l = 0; l < count; l++) {
-    const lx = randInt(rng, 2, sliceW - 2);
-    canvas.struct.rect(lx, yBase - 18, 1, 18);
-    canvas.struct.rect(lx - 1, yBase - 18, 3, 1);
-    canvas.glows.rect(lx - 2, yBase - 20, 5, 5);
-    canvas.warm.rect(lx + 0.5, yBase - 17.5, 0.5, 0.5);
+    const lx = randInt(ctx.rng, 2, ctx.sliceW - 2);
+    ctx.canvas.struct.rect(lx, ctx.yBase - 18, 1, 18);
+    ctx.canvas.struct.rect(lx - 1, ctx.yBase - 18, 3, 1);
+    ctx.canvas.glows.rect(lx - 2, ctx.yBase - 20, 5, 5);
+    ctx.canvas.warm.rect(lx + 0.5, ctx.yBase - 17.5, 0.5, 0.5);
   }
 }
 
@@ -604,58 +606,48 @@ export function drawBridge(
   return true;
 }
 
-function drawGreebleProtrusion(canvas: BuildingCanvas, rng: RNG, ctx: GreebleCtx): void {
-  const gw = randInt(rng, 2, 6);
-  const gh = randInt(rng, 2, 4);
-  const gx = randInt(rng, 0, Math.max(0, ctx.sliceW - gw));
-  canvas.struct.rect(gx, ctx.yBase - gh, gw, gh);
-  if (chance(rng, 0.3)) canvas.glows.rect(gx + 1, ctx.yBase - gh - 1, 2, 2);
+function drawGreebleProtrusion(ctx: SliceContext): void {
+  const gw = randInt(ctx.rng, 2, 6);
+  const gh = randInt(ctx.rng, 2, 4);
+  const gx = randInt(ctx.rng, 0, Math.max(0, ctx.sliceW - gw));
+  ctx.canvas.struct.rect(gx, ctx.yBase - gh, gw, gh);
+  if (chance(ctx.rng, 0.3)) ctx.canvas.glows.rect(gx + 1, ctx.yBase - gh - 1, 2, 2);
 }
 
-function drawGreebleLedge(canvas: BuildingCanvas, rng: RNG, ctx: GreebleCtx): void {
-  const gl = randInt(rng, 6, 20);
-  const gx = randInt(rng, 0, Math.max(0, ctx.sliceW - gl));
-  canvas.struct.rect(gx, ctx.yBase - 2, gl, 1);
+function drawGreebleLedge(ctx: SliceContext): void {
+  const gl = randInt(ctx.rng, 6, 20);
+  const gx = randInt(ctx.rng, 0, Math.max(0, ctx.sliceW - gl));
+  ctx.canvas.struct.rect(gx, ctx.yBase - 2, gl, 1);
 }
 
-function drawGreebleStroke(canvas: BuildingCanvas, rng: RNG, ctx: GreebleCtx): void {
-  if (chance(rng, 0.5)) {
-    const gs = randInt(rng, 4, 10);
-    canvas.struct.rect(randInt(rng, 0, ctx.sliceW - 1), ctx.yBase - gs, 1, gs);
+function drawGreebleStroke(ctx: SliceContext): void {
+  if (chance(ctx.rng, 0.5)) {
+    const gs = randInt(ctx.rng, 4, 10);
+    ctx.canvas.struct.rect(randInt(ctx.rng, 0, ctx.sliceW - 1), ctx.yBase - gs, 1, gs);
   } else {
-    const gl = randInt(rng, 10, 30);
-    canvas.struct.rect(randInt(rng, 0, Math.max(0, ctx.sliceW - gl)), ctx.yBase - 5, gl, 1);
+    const gl = randInt(ctx.rng, 10, 30);
+    ctx.canvas.struct.rect(randInt(ctx.rng, 0, Math.max(0, ctx.sliceW - gl)), ctx.yBase - 5, gl, 1);
   }
 }
 
-export function drawDetailedGreebles(
-  canvas: BuildingCanvas,
-  rng: RNG,
-  count: number,
-  ctx: GreebleCtx,
-): void {
+export function drawDetailedGreebles(ctx: SliceContext, count: number): void {
   for (let g = 0; g < count; g++) {
-    const type = randInt(rng, 0, 2);
-    if (type === 0) drawGreebleProtrusion(canvas, rng, ctx);
-    else if (type === 1) drawGreebleLedge(canvas, rng, ctx);
-    else drawGreebleStroke(canvas, rng, ctx);
+    const type = randInt(ctx.rng, 0, 2);
+    if (type === 0) drawGreebleProtrusion(ctx);
+    else if (type === 1) drawGreebleLedge(ctx);
+    else drawGreebleStroke(ctx);
   }
 }
 
-export function drawSimpleGreebles(
-  canvas: BuildingCanvas,
-  rng: RNG,
-  count: number,
-  ctx: GreebleCtx,
-): void {
+export function drawSimpleGreebles(ctx: SliceContext, count: number): void {
   for (let g = 0; g < count; g++) {
-    if (chance(rng, 0.5)) {
-      const gw = randInt(rng, 2, 5);
-      const gh = randInt(rng, 2, 3);
-      canvas.struct.rect(randInt(rng, 0, Math.max(0, ctx.sliceW - gw)), ctx.yBase - gh, gw, gh);
+    if (chance(ctx.rng, 0.5)) {
+      const gw = randInt(ctx.rng, 2, 5);
+      const gh = randInt(ctx.rng, 2, 3);
+      ctx.canvas.struct.rect(randInt(ctx.rng, 0, Math.max(0, ctx.sliceW - gw)), ctx.yBase - gh, gw, gh);
     } else {
-      const gl = randInt(rng, 5, 16);
-      canvas.struct.rect(randInt(rng, 0, Math.max(0, ctx.sliceW - gl)), ctx.yBase - 2, gl, 1);
+      const gl = randInt(ctx.rng, 5, 16);
+      ctx.canvas.struct.rect(randInt(ctx.rng, 0, Math.max(0, ctx.sliceW - gl)), ctx.yBase - 2, gl, 1);
     }
   }
 }

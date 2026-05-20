@@ -1,6 +1,6 @@
 export type {
   BuildingCanvas, BuildingTheme, BuildingRect, BuildingOpts,
-  WindowOpts, Archetype, BodyTint, Animator, Tier, GreebleCtx,
+  WindowOpts, Archetype, BodyTint, Animator, Tier, SliceContext,
 } from './core';
 export {
   FRONT_THEME, BACK_THEME,

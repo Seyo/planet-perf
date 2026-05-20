@@ -8,7 +8,7 @@ import {
   drawBuilding, drawStreetLamps, drawBridge, drawDetailedGreebles, drawSimpleGreebles,
   drawUndergroundCity,
   FRONT_THEME, BACK_THEME,
-  type Animator, type BuildingRect, type BuildingTheme, type BuildingOpts,
+  type Animator, type BuildingRect, type BuildingTheme, type BuildingOpts, type SliceContext,
 } from "./buildings";
 import type { SliceFactory } from "./slice-ring";
 
@@ -104,11 +104,12 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
 
     // Slice-level features on a single canvas painted ON TOP of all buildings.
     const sliceCanvas = makeCanvas(0);
-    drawStreetLamps(sliceCanvas, rng, sliceWidthPxAtZoom1, yBase);
+    const frontCtx: SliceContext = { canvas: sliceCanvas, rng, sliceW: sliceWidthPxAtZoom1, yBase };
+    drawStreetLamps(frontCtx);
     if (chance(rng, 0.28)) {
       drawBridge(sliceCanvas, rng, built, yBase, { minHeight: 40, bridgeHeight: 2, endpointGlows: true, lightCount: [3, 6] });
     }
-    drawDetailedGreebles(sliceCanvas, rng, randInt(rng, 10, 20), { sliceW: sliceWidthPxAtZoom1, yBase });
+    drawDetailedGreebles(frontCtx, randInt(rng, 10, 20));
     commitCanvas(root, sliceCanvas, theme);
 
     return root;
@@ -187,11 +188,12 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
     commitCanvas(root, buildingCanvas, theme);
 
     const sliceCanvas = makeCanvas(0);
+    const backCtx: SliceContext = { canvas: sliceCanvas, rng, sliceW: sliceWidthPxAtZoom1, yBase };
     const bridgeCount = randInt(rng, 1, 2);
     for (let br = 0; br < bridgeCount; br++) {
       if (chance(rng, 0.45)) drawBridge(sliceCanvas, rng, built, yBase, { minHeight: 30, bridgeHeight: 1, endpointGlows: false, lightCount: [2, 4] });
     }
-    drawSimpleGreebles(sliceCanvas, rng, randInt(rng, 8, 14), { sliceW: sliceWidthPxAtZoom1, yBase });
+    drawSimpleGreebles(backCtx, randInt(rng, 8, 14));
     commitCanvas(root, sliceCanvas, theme);
 
     if (underground) {
