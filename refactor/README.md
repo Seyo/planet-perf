@@ -12,7 +12,7 @@ Each task is small enough to complete, visually verify, and commit in a single s
 | # | Task | File(s) | Score before | Status |
 |---|------|---------|-------------|--------|
 | 01 | [Extract `drawUndergroundCity`](task-01-extract-underground-city.md) | `layer-factories.ts` | 7.52 | `done` |
-| 02 | [Extract `drawBuildingDecorations`](task-02-extract-building-decorations.md) | `building-v2.ts` | 7.33 | `todo` |
+| 02 | [Extract `drawBuildingDecorations`](task-02-extract-building-decorations.md) | `building-v2.ts` | 7.33 | `done` |
 | 03 | [Introduce `SliceContext` to kill 5-arg functions](task-03-slice-context-type.md) | `building-v2.ts`, `layer-factories.ts` | 7.33 | `todo` |
 | 04 | [Split `Shuttle.update` into phase handlers](task-04-shuttle-state-machine.md) | `shuttle-layer.ts` | 8.51 | `todo` |
 | 05 | [Group physics constants into typed configs](task-05-shuttle-physics-config.md) | `shuttle-layer.ts` | 8.51 | `todo` |

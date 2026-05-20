@@ -1,5 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import { type RNG, chance, randInt, randRange } from "../rng";
+import { drawBuildingDecorations } from "./decorations";
 
 export type { RNG };
 export type Animator = { update(tick: number): void };
@@ -8,16 +9,18 @@ export type Animator = { update(tick: number): void };
 const _warmGfxRefs: WeakRef<Graphics>[] = [];
 const _coolGfxRefs: WeakRef<Graphics>[] = [];
 
-export function setLightColors(warm: number, cool: number): void {
-  for (const ref of _warmGfxRefs) {
+function applyTint(refs: WeakRef<Graphics>[], color: number): void {
+  for (const ref of refs) {
     const g = ref.deref();
-    if (g && !g.destroyed) g.tint = warm;
-  }
-  for (const ref of _coolGfxRefs) {
-    const g = ref.deref();
-    if (g && !g.destroyed) g.tint = cool;
+    if (g && !g.destroyed) g.tint = color;
   }
 }
+
+export function setLightColors(warm: number, cool: number): void {
+  applyTint(_warmGfxRefs, warm);
+  applyTint(_coolGfxRefs, cool);
+}
+
 export type BuildingRect = { x: number; w: number; h: number };
 
 export type BodyTint = { x: number; y: number; w: number; h: number; d: number };
@@ -117,6 +120,8 @@ export type BridgeOpts = {
   lightCount?:    [number, number];
 };
 
+export type GreebleCtx = { sliceW: number; yBase: number };
+
 // ---------- canvas lifecycle ----------
 
 export function makeCanvas(flickerGroups = 0): BuildingCanvas {
@@ -205,17 +210,14 @@ export function registerFlickerAnimators(
   }
 }
 
-// ---------- primitives (kept identical to v1 for API parity) ----------
+// ---------- primitives ----------
 
-function placeWindow(canvas: BuildingCanvas, rng: RNG, wx: number, wy: number, isWarm: boolean): void {
+function pickWindowLayer(canvas: BuildingCanvas, rng: RNG, isWarm: boolean): Graphics {
   if (canvas.fwarm.length > 0 && chance(rng, 0.03)) {
     const g = randInt(rng, 0, canvas.fwarm.length - 1);
-    if (isWarm) canvas.fwarm[g].rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
-    else        canvas.fcool[g].rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
-  } else {
-    if (isWarm) canvas.warm.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
-    else        canvas.cool.rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
+    return isWarm ? canvas.fwarm[g] : canvas.fcool[g];
   }
+  return isWarm ? canvas.warm : canvas.cool;
 }
 
 export function drawWindowGrid(
@@ -239,72 +241,16 @@ export function drawWindowGrid(
     for (let wx = x + padLeft; wx <= x + w - padRight; wx += stepX) {
       if (!chance(rng, density)) continue;
       canvas.glows.rect(wx - 1, wy - 1, 3, 3);
-      placeWindow(canvas, rng, wx, wy, chance(rng, warmChance));
+      pickWindowLayer(canvas, rng, chance(rng, warmChance)).rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
     }
   }
 }
 
-export function drawAntenna(
-  canvas: BuildingCanvas,
-  rng: RNG,
-  building: BuildingRect,
-  yBase: number,
-  opts: { chanceP?: number; padX?: number; minH?: number; maxH?: number; lightChance?: number } = {},
-): void {
-  const { chanceP = 0.55, padX = 2, minH = 6, maxH = 16, lightChance = 0.5 } = opts;
-  if (!chance(rng, chanceP)) return;
-
-  const { x, w } = building;
-  const top = yBase - building.h;
-  const ax  = x + randInt(rng, padX, Math.max(padX, w - padX));
-  const ah  = randInt(rng, minH, maxH);
-
-  canvas.struct.rect(ax, top - ah, 1, ah);
-  if (chance(rng, lightChance)) {
-    canvas.glows.rect(ax - 1, top - ah - 1, 3, 3);
-    if (chance(rng, 0.5)) canvas.warm.rect(ax + 0.5, top - ah + 0.5, 0.5, 0.5);
-    else                  canvas.cool.rect(ax + 0.5, top - ah + 0.5, 0.5, 0.5);
-  }
-}
-
-export function drawShopFront(
-  canvas: BuildingCanvas,
-  building: BuildingRect,
-  yBase: number,
-): void {
-  const { x, w } = building;
-  canvas.shopLight.rect(x, yBase - 3, w - 0.5, 3);
-  canvas.glows.rect(x - 1, yBase - 4, w + 1, 4);
-}
-
-export function drawLandingPad(
-  canvas: BuildingCanvas,
-  rng: RNG,
-  building: BuildingRect,
-  yBase: number,
-): void {
-  const { x, w } = building;
-  const top       = yBase - building.h;
-  const stickRight = chance(rng, 0.5);
-  const padX      = stickRight ? x : x - 8;
-  const padW      = w + 8;
-
-  canvas.struct.rect(padX, top - 2, padW, 2);
-  const tipX = stickRight ? padX + padW - 1 : padX - 1;
-  canvas.glows.rect(tipX, top - 3, 3, 3);
-  canvas.cool.rect(tipX + 0.5, top - 1.5, 0.5, 0.5);
-
-  const cx = x + w / 2;
-  canvas.struct.rect(cx, top - 6, 1, 4);
-  canvas.glows.rect(cx - 1, top - 7, 3, 3);
-  canvas.warm.rect(cx + 0.5, top - 5.5, 0.5, 0.5);
-}
-
 // ---------- v2: stacked-volume helpers ----------
 
-type ChamferCorner = "tl" | "tr" | "both";
-type Chamfer = { corner: ChamferCorner; size: number };
-type Tier = { x: number; w: number; h: number; top: number; bottom: number; chamfer?: Chamfer };
+export type ChamferCorner = "tl" | "tr" | "both";
+export type Chamfer = { corner: ChamferCorner; size: number };
+export type Tier = { x: number; w: number; h: number; top: number; bottom: number; chamfer?: Chamfer };
 
 function pickColorDrift(rng: RNG, variance: number): { d: number } {
   if (variance <= 0) return { d: 0 };
@@ -354,8 +300,7 @@ function layoutSquatT(building: BuildingRect, yBase: number, rng: RNG): Tier[] {
   if (extrCount === 1) {
     const ew = Math.max(3, Math.floor(w * randRange(rng, 0.35, 0.6)));
     const ex = x + randInt(rng, 0, w - ew);
-    const eh = remH;
-    tiers.push(tierFrom(ex, ew, eh, baseTop - eh));
+    tiers.push(tierFrom(ex, ew, remH, baseTop - remH));
   } else {
     const ew1 = Math.max(3, Math.floor(w * randRange(rng, 0.25, 0.4)));
     const ew2 = Math.max(3, Math.floor(w * randRange(rng, 0.25, 0.4)));
@@ -369,64 +314,58 @@ function layoutSquatT(building: BuildingRect, yBase: number, rng: RNG): Tier[] {
   return tiers;
 }
 
-function layoutStepped(building: BuildingRect, yBase: number, rng: RNG, opts: BuildingOpts): Tier[] {
-  const { x, w, h } = building;
-  const [vMin, vMax] = opts.volumeCountRange ?? [2, 4];
-  const [sMin, sMax] = opts.setbackRange ?? [2, 5];
-  let n = randInt(rng, vMin, vMax);
-  if (h < 50) n = Math.min(n, 2);
-  if (h < 25) n = 1;
+type SetbackCtx = {
+  x: number; w: number; h: number; yBase: number;
+  vRange: [number, number]; sRange: [number, number];
+};
+
+function layoutWithSetback(
+  ctx: SetbackCtx,
+  rng: RNG,
+  applySetback: (curX: number, curW: number, sb: number) => { x: number; w: number } | null,
+): Tier[] {
+  let n = randInt(rng, ctx.vRange[0], ctx.vRange[1]);
+  if (ctx.h < 50) n = Math.min(n, 2);
+  if (ctx.h < 25) n = 1;
 
   const tiers: Tier[] = [];
-  let curX = x, curW = w, remH = h;
-  let curTop = yBase;
+  let curX = ctx.x, curW = ctx.w, remH = ctx.h, curTop = ctx.yBase;
   for (let i = 0; i < n; i++) {
     const isLast = i === n - 1;
-    const tierH = isLast
-      ? remH
-      : Math.max(5, Math.floor(remH * randRange(rng, 0.35, 0.6)));
+    const tierH = isLast ? remH : Math.max(5, Math.floor(remH * randRange(rng, 0.35, 0.6)));
     const top = curTop - tierH;
     tiers.push(tierFrom(curX, curW, tierH, top));
     remH -= tierH;
     curTop = top;
     if (isLast) break;
-    const setback = randInt(rng, sMin, sMax);
-    if (curW - setback * 2 < 2) break;
-    curX += setback;
-    curW -= setback * 2;
+    const next = applySetback(curX, curW, randInt(rng, ctx.sRange[0], ctx.sRange[1]));
+    if (!next) break;
+    ({ x: curX, w: curW } = next);
   }
   return tiers;
 }
 
+function toSetbackCtx(building: BuildingRect, yBase: number, opts: BuildingOpts): SetbackCtx {
+  return {
+    x: building.x, w: building.w, h: building.h, yBase,
+    vRange: opts.volumeCountRange ?? [2, 4],
+    sRange: opts.setbackRange    ?? [2, 5],
+  };
+}
+
+function layoutStepped(building: BuildingRect, yBase: number, rng: RNG, opts: BuildingOpts): Tier[] {
+  return layoutWithSetback(toSetbackCtx(building, yBase, opts), rng, (curX, curW, sb) => {
+    if (curW - sb * 2 < 2) return null;
+    return { x: curX + sb, w: curW - sb * 2 };
+  });
+}
+
 function layoutStaircase(building: BuildingRect, yBase: number, rng: RNG, opts: BuildingOpts): Tier[] {
-  const { x, w, h } = building;
-  const [vMin, vMax] = opts.volumeCountRange ?? [2, 4];
-  const [sMin, sMax] = opts.setbackRange ?? [2, 5];
-  let n = randInt(rng, vMin, vMax);
-  if (h < 50) n = Math.min(n, 2);
-  if (h < 25) n = 1;
-
   const side: "left" | "right" = chance(rng, 0.5) ? "left" : "right";
-
-  const tiers: Tier[] = [];
-  let curX = x, curW = w, remH = h;
-  let curTop = yBase;
-  for (let i = 0; i < n; i++) {
-    const isLast = i === n - 1;
-    const tierH = isLast
-      ? remH
-      : Math.max(5, Math.floor(remH * randRange(rng, 0.35, 0.6)));
-    const top = curTop - tierH;
-    tiers.push(tierFrom(curX, curW, tierH, top));
-    remH -= tierH;
-    curTop = top;
-    if (isLast) break;
-    const setback = randInt(rng, sMin, sMax);
-    if (curW - setback < 2) break;
-    if (side === "left") curX += setback;
-    curW -= setback;
-  }
-  return tiers;
+  return layoutWithSetback(toSetbackCtx(building, yBase, opts), rng, (curX, curW, sb) => {
+    if (curW - sb < 2) return null;
+    return { x: side === "left" ? curX + sb : curX, w: curW - sb };
+  });
 }
 
 function layoutTwinStack(building: BuildingRect, yBase: number, rng: RNG): Tier[] {
@@ -488,79 +427,33 @@ function layoutVolumes(building: BuildingRect, yBase: number, rng: RNG, opts: Bu
   return tiers;
 }
 
-function emitTierBody(
-  canvas: BuildingCanvas,
-  tier: Tier,
-  drift: { d: number } | null,
-): void {
-  const useTints = drift !== null;
-  const push = (x: number, y: number, w: number, h: number) => {
-    if (w <= 0 || h <= 0) return;
-    if (useTints) canvas.bodyTints.push({ x, y, w, h, d: drift.d });
-    else canvas.bodies.rect(x, y, w, h);
-  };
+type PushFn = (x: number, y: number, w: number, h: number) => void;
 
-  if (!tier.chamfer) {
-    push(tier.x, tier.top, tier.w, tier.h);
-    return;
-  }
-
-  const cs = tier.chamfer.size;
-  const corner = tier.chamfer.corner;
-  // body below chamfer zone
+function emitChamferRows(push: PushFn, tier: Tier): void {
+  const cs     = tier.chamfer!.size;
+  const corner = tier.chamfer!.corner;
   push(tier.x, tier.top + cs, tier.w, tier.h - cs);
-  // stair-step rows from top of chamfer down to first full-width row
   for (let row = 0; row < cs; row++) {
     const taper = cs - 1 - row;
-    let rx = tier.x;
-    let rw = tier.w;
+    let rx = tier.x, rw = tier.w;
     if (corner === "tl" || corner === "both") { rx += taper; rw -= taper; }
     if (corner === "tr" || corner === "both") rw -= taper;
     push(rx, tier.top + row, rw, 1);
   }
 }
 
-function drawChamferNeon(
+function emitTierBody(
   canvas: BuildingCanvas,
   tier: Tier,
-  accentLayer: Graphics,
+  drift: { d: number } | null,
 ): void {
-  if (!tier.chamfer) return;
-  const cs = tier.chamfer.size;
-  const corner = tier.chamfer.corner;
-  for (let row = 0; row < cs; row++) {
-    const taper = cs - 1 - row;
-    if (corner === "tl" || corner === "both") {
-      const ex = tier.x + taper;
-      accentLayer.rect(ex, tier.top + row, 1, 1);
-      canvas.glows.rect(ex - 1, tier.top + row - 1, 3, 3);
-    }
-    if (corner === "tr" || corner === "both") {
-      const ex = tier.x + tier.w - taper - 1;
-      accentLayer.rect(ex, tier.top + row, 1, 1);
-      canvas.glows.rect(ex - 1, tier.top + row - 1, 3, 3);
-    }
-  }
-}
-
-function drawDiagonalAccent(
-  canvas: BuildingCanvas,
-  rng: RNG,
-  tier: Tier,
-  accentLayer: Graphics,
-): void {
-  if (tier.h < 18 || tier.w < 8) return;
-  const maxLen = Math.min(12, Math.floor(tier.h / 2), tier.w - 2);
-  if (maxLen < 4) return;
-  const len = randInt(rng, 4, maxLen);
-  const dirRight = chance(rng, 0.5);
-  const startX = tier.x + randInt(rng, 1, Math.max(1, tier.w - len - 1));
-  const startY = tier.top + randInt(rng, 3, Math.max(3, tier.h - len - 2));
-  for (let i = 0; i < len; i++) {
-    const px = dirRight ? startX + i : startX + (len - 1 - i);
-    accentLayer.rect(px, startY + i, 1, 1);
-    canvas.glows.rect(px - 1, startY + i - 1, 3, 3);
-  }
+  const push: PushFn = (x, y, w, h) => {
+    if (w <= 0 || h <= 0) return;
+    if (drift !== null) canvas.bodyTints.push({ x, y, w, h, d: drift.d });
+    else canvas.bodies.rect(x, y, w, h);
+  };
+  if (!tier.chamfer) { push(tier.x, tier.top, tier.w, tier.h); return; }
+  emitChamferRows(push, tier);
 }
 
 function drawNeonTrim(
@@ -614,78 +507,32 @@ export function drawBuilding(
     yBase,
     windowOpts,
     windowMinH        = 0,
-    antennaChance     = 0,
-    antennaPadX,
-    antennaHRange,
-    antennaLightChance,
-    shopFrontChance   = 0,
-    shopFrontMinH     = 0,
-    landingPadChance  = 0,
-    landingPadMinH    = 150,
     bodyColorVariance = 0,
   } = opts;
 
   const tiers = layoutVolumes(building, yBase, rng, opts);
   if (tiers.length === 0) return;
 
-  // each tier gets a small per-channel color drift that commitCanvas applies relative to baseColor
   for (const t of tiers) {
     const drift = bodyColorVariance > 0 ? pickColorDrift(rng, bodyColorVariance) : null;
     emitTierBody(canvas, t, drift);
   }
 
-  // pick the accent (warm vs cool) once for this building
   const accent: "warm" | "cool" = chance(rng, 0.55) ? "warm" : "cool";
 
-  // window grids per tier
   for (const t of tiers) {
     if (t.h > windowMinH) {
       drawWindowGrid(canvas, rng, { x: t.x, w: t.w, h: t.h }, t.bottom, windowOpts);
     }
   }
 
-  // neon trim
   drawNeonTrim(canvas, rng, tiers, accent, opts);
 
-  // diagonal neon along chamfered edges (gated by the same trim chance)
-  const accentLayer = accent === "warm" ? canvas.warm : canvas.cool;
-  const trimP = opts.neonTrimChance ?? 0.4;
-  for (const t of tiers) {
-    if (!t.chamfer) continue;
-    if (chance(rng, trimP)) drawChamferNeon(canvas, t, accentLayer);
-  }
-
-  // standalone diagonal slash detail
-  const diagP = opts.diagonalAccentChance ?? 0;
-  if (diagP > 0) {
-    for (const t of tiers) {
-      if (chance(rng, diagP)) drawDiagonalAccent(canvas, rng, t, accentLayer);
-    }
-  }
-
-  // landing pad on top tier
   const topTier = tiers.reduce((a, b) => (a.top < b.top ? a : b));
-  if (landingPadChance > 0 && topTier.h >= landingPadMinH && chance(rng, landingPadChance)) {
-    drawLandingPad(canvas, rng, { x: topTier.x, w: topTier.w, h: topTier.h }, topTier.bottom);
-  }
-
-  // antennae on top tier
-  if (antennaChance > 0) {
-    drawAntenna(canvas, rng, { x: topTier.x, w: topTier.w, h: topTier.h }, topTier.bottom, {
-      chanceP:     antennaChance,
-      ...(antennaPadX        !== undefined && { padX: antennaPadX }),
-      ...(antennaHRange      !== undefined && { minH: antennaHRange[0], maxH: antennaHRange[1] }),
-      ...(antennaLightChance !== undefined && { lightChance: antennaLightChance }),
-    });
-  }
-
-  // shop front along the base
-  if (shopFrontChance > 0 && building.h > shopFrontMinH && chance(rng, shopFrontChance)) {
-    drawShopFront(canvas, building, yBase);
-  }
+  drawBuildingDecorations(canvas, rng, tiers, topTier, building, yBase, opts, accent);
 }
 
-// ---------- compound: slice-level features (kept identical to v1) ----------
+// ---------- compound: slice-level features ----------
 
 export function drawStreetLamps(
   canvas: BuildingCanvas,
@@ -757,36 +604,41 @@ export function drawBridge(
   return true;
 }
 
+function drawGreebleProtrusion(canvas: BuildingCanvas, rng: RNG, ctx: GreebleCtx): void {
+  const gw = randInt(rng, 2, 6);
+  const gh = randInt(rng, 2, 4);
+  const gx = randInt(rng, 0, Math.max(0, ctx.sliceW - gw));
+  canvas.struct.rect(gx, ctx.yBase - gh, gw, gh);
+  if (chance(rng, 0.3)) canvas.glows.rect(gx + 1, ctx.yBase - gh - 1, 2, 2);
+}
+
+function drawGreebleLedge(canvas: BuildingCanvas, rng: RNG, ctx: GreebleCtx): void {
+  const gl = randInt(rng, 6, 20);
+  const gx = randInt(rng, 0, Math.max(0, ctx.sliceW - gl));
+  canvas.struct.rect(gx, ctx.yBase - 2, gl, 1);
+}
+
+function drawGreebleStroke(canvas: BuildingCanvas, rng: RNG, ctx: GreebleCtx): void {
+  if (chance(rng, 0.5)) {
+    const gs = randInt(rng, 4, 10);
+    canvas.struct.rect(randInt(rng, 0, ctx.sliceW - 1), ctx.yBase - gs, 1, gs);
+  } else {
+    const gl = randInt(rng, 10, 30);
+    canvas.struct.rect(randInt(rng, 0, Math.max(0, ctx.sliceW - gl)), ctx.yBase - 5, gl, 1);
+  }
+}
+
 export function drawDetailedGreebles(
   canvas: BuildingCanvas,
   rng: RNG,
   count: number,
-  sliceW: number,
-  yBase: number,
+  ctx: GreebleCtx,
 ): void {
   for (let g = 0; g < count; g++) {
     const type = randInt(rng, 0, 2);
-    if (type === 0) {
-      const gw = randInt(rng, 2, 6);
-      const gh = randInt(rng, 2, 4);
-      const gx = randInt(rng, 0, Math.max(0, sliceW - gw));
-      canvas.struct.rect(gx, yBase - gh, gw, gh);
-      if (chance(rng, 0.3)) canvas.glows.rect(gx + 1, yBase - gh - 1, 2, 2);
-    } else if (type === 1) {
-      const gl = randInt(rng, 6, 20);
-      const gx = randInt(rng, 0, Math.max(0, sliceW - gl));
-      canvas.struct.rect(gx, yBase - 2, gl, 1);
-    } else {
-      if (chance(rng, 0.5)) {
-        const gs = randInt(rng, 4, 10);
-        const gx = randInt(rng, 0, sliceW - 1);
-        canvas.struct.rect(gx, yBase - gs, 1, gs);
-      } else {
-        const gl = randInt(rng, 10, 30);
-        const gx = randInt(rng, 0, Math.max(0, sliceW - gl));
-        canvas.struct.rect(gx, yBase - 5, gl, 1);
-      }
-    }
+    if (type === 0) drawGreebleProtrusion(canvas, rng, ctx);
+    else if (type === 1) drawGreebleLedge(canvas, rng, ctx);
+    else drawGreebleStroke(canvas, rng, ctx);
   }
 }
 
@@ -794,19 +646,16 @@ export function drawSimpleGreebles(
   canvas: BuildingCanvas,
   rng: RNG,
   count: number,
-  sliceW: number,
-  yBase: number,
+  ctx: GreebleCtx,
 ): void {
   for (let g = 0; g < count; g++) {
     if (chance(rng, 0.5)) {
       const gw = randInt(rng, 2, 5);
       const gh = randInt(rng, 2, 3);
-      const gx = randInt(rng, 0, Math.max(0, sliceW - gw));
-      canvas.struct.rect(gx, yBase - gh, gw, gh);
+      canvas.struct.rect(randInt(rng, 0, Math.max(0, ctx.sliceW - gw)), ctx.yBase - gh, gw, gh);
     } else {
       const gl = randInt(rng, 5, 16);
-      const gx = randInt(rng, 0, Math.max(0, sliceW - gl));
-      canvas.struct.rect(gx, yBase - 2, gl, 1);
+      canvas.struct.rect(randInt(rng, 0, Math.max(0, ctx.sliceW - gl)), ctx.yBase - 2, gl, 1);
     }
   }
 }

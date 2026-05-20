@@ -1,6 +1,6 @@
 export type {
   BuildingCanvas, BuildingTheme, BuildingRect, BuildingOpts,
-  WindowOpts, Archetype, BodyTint, Animator,
+  WindowOpts, Archetype, BodyTint, Animator, Tier, GreebleCtx,
 } from './core';
 export {
   FRONT_THEME, BACK_THEME,
@@ -10,3 +10,4 @@ export {
   drawDetailedGreebles, drawSimpleGreebles,
 } from './core';
 export { drawUndergroundCity } from './underground';
+export { drawBuildingDecorations } from './decorations';
