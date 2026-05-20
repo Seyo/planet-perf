@@ -290,7 +290,7 @@ export function makeFrontLayer(animators?: Animator[]) {
  return frontLayer;
 }
 
-type BackCityConfig = {
+export type BackCityConfig = {
   motionScale?:    number;
   yMotionScale?:   number;
   baseColor?:      number;
@@ -337,6 +337,44 @@ export function makeBackCityLayer(config: BackCityConfig = {}) {
       const content = singleFactory(superIndex * BACK_SUPER_SIZE + j, 0);
       content.x = j * singleWidth;
       root.addChild(content);
+    }
+    return root;
+  };
+
+  const ring = new SliceRing(superCount, superDeg, superWidth, superFactory, bakeResolution);
+  return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
+}
+
+export function makeGroupedBackCityLayer(configs: BackCityConfig[]): SliceLayer {
+  const n = configs.length;
+  const motionScale  = configs.reduce((s, c) => s + (c.motionScale  ?? 0.97), 0) / n;
+  const yMotionScale = configs.reduce((s, c) => s + (c.yMotionScale ?? motionScale), 0) / n;
+  const bakeResolution = Math.max(...configs.map(c => c.bakeResolution ?? 1));
+
+  const singleWidth = 120;
+  const superCount  = 72 / BACK_SUPER_SIZE;
+  const superDeg    = 5   * BACK_SUPER_SIZE;
+  const superWidth  = singleWidth * BACK_SUPER_SIZE;
+
+  const factories = configs.map(c => makeBackCityFactory({
+    sliceWidthPxAtZoom1: singleWidth,
+    baseColor:      c.baseColor      ?? 0x060810,
+    density:        c.density        ?? 0.85,
+    minH:           c.minH           ?? 40,
+    maxH:           c.maxH           ?? 280,
+    salt:           c.salt           ?? 202,
+    underground:    c.underground    ?? false,
+    undergroundDim: c.undergroundDim ?? 0,
+  }));
+
+  const superFactory: SliceFactory = (superIndex) => {
+    const root = new Container();
+    for (let j = 0; j < BACK_SUPER_SIZE; j++) {
+      const sliceIdx = superIndex * BACK_SUPER_SIZE + j;
+      const subSlice = new Container();
+      for (const factory of factories) subSlice.addChild(factory(sliceIdx, 0));
+      subSlice.x = j * singleWidth;
+      root.addChild(subSlice);
     }
     return root;
   };
