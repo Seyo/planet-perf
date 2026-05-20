@@ -11,7 +11,10 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(Select-Object -First 5)"
+      "Bash(Select-Object -First 5)",
+      "WebFetch(domain:codescene.io)",
+      "mcp__codescene__code_health_score",
+      "Bash(git rm *)"
     ]
   }
 }

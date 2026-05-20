@@ -38,6 +38,16 @@ Slices cover the full 360° in fixed angular steps (5° for front/back rings →
 
 Parallax is achieved by multiplying the camera angle by `motionScale` before computing slice positions. A layer with `motionScale=0.7` moves at 70% of the drag speed, creating depth.
 
+### Code Health
+
+All new code must score **10.0** on CodeScene code health. Before marking any task done, run `mcp__codescene__code_health_score` on every file you created or modified and fix any findings until the score is 10.0.
+
+The existing Yellow files (`building-v2.ts` 7.33, `layer-factories.ts` 7.52, `shuttle-layer.ts` 8.51) are being improved incrementally via the `refactor/` plan — do not introduce new smells into them while working on other things.
+
+### Module Organisation
+
+Prefer folders with a barrel `index.ts` that re-exports the folder's public surface. New feature areas (e.g. a new actor type, a new building category) should live in their own subfolder with an `index.ts`, keeping internal helpers private to the folder.
+
 ### Legacy File
 
 `src/planet-logic.ts` is a superseded monolithic implementation. It is not imported anywhere. Do not extend it; the canonical implementation is `src/planet/`.
