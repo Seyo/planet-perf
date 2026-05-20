@@ -3,7 +3,7 @@
 **File:** `src/planet/planet.ts`  
 **Score before:** 9.53 (Green)  
 **CodeScene issue:** `Planet.stepWorld` bumps=3 (lines 150–197); `makeHazeOverlay` 5 arguments  
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

@@ -17,7 +17,7 @@ Each task is small enough to complete, visually verify, and commit in a single s
 | 04 | [Split `Shuttle.update` into phase handlers](task-04-shuttle-state-machine.md) | `shuttle-layer.ts` | 8.51 | `done` |
 | 05 | [Group physics constants into typed configs](task-05-shuttle-physics-config.md) | `shuttle-layer.ts` | 8.51 | `done` |
 | 06 | [Deduplicate `DebugPanel` button methods](task-06-debug-panel-dedup.md) | `debug-panel.ts` | 9.09 | `done` |
-| 07 | [Clean `Planet.stepWorld` bumpy road](task-07-planet-stepworld.md) | `planet.ts` | 9.53 | `todo` |
+| 07 | [Clean `Planet.stepWorld` bumpy road](task-07-planet-stepworld.md) | `planet.ts` | 9.53 | `done` |
 
 ---
 

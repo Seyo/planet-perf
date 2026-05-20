@@ -147,52 +147,58 @@ export class Planet {
     return 1 / ppdEffective;
   }
 
-  private stepWorld(dt: number) {
-    if (this.pointer.isDown) {
-      if (this.prevPointerX === null) {
-        this.dragStartPointerX = this.pointer.x;
-        this.dragStartWorldXDeg = this.world.xDeg;
-        this.dragStartPointerY = this.pointer.y;
-        this.dragStartCameraY = this.world.cameraY;
-        this.prevPointerX = this.pointer.x;
-        this.prevPointerY = this.pointer.y;
-      }
-
-      const deltaPx = this.pointer.x - this.dragStartPointerX;
-      this.world.xDeg =
-        this.dragStartWorldXDeg - deltaPx * this.degreesPerPixel;
-
-      // Drag up → reveal underground (drag up = deltaPy negative = cameraY increases)
-      const deltaPy = this.pointer.y - this.dragStartPointerY;
-      this.world.cameraY = this.clampCameraY(this.dragStartCameraY - deltaPy / this.zoom.zoom);
-
-      if (INERTIA_ENABLED) {
-        this.world.vDeg =
-          (this.pointer.x - this.prevPointerX) * this.degreesPerPixel;
-        this.world.vY = (this.pointer.y - this.prevPointerY!) / this.zoom.zoom;
-      }
+  private applyPointerDrag(): void {
+    if (this.prevPointerX === null) {
+      this.dragStartPointerX = this.pointer.x;
+      this.dragStartWorldXDeg = this.world.xDeg;
+      this.dragStartPointerY = this.pointer.y;
+      this.dragStartCameraY = this.world.cameraY;
       this.prevPointerX = this.pointer.x;
       this.prevPointerY = this.pointer.y;
+    }
+
+    const deltaPx = this.pointer.x - this.dragStartPointerX;
+    this.world.xDeg = this.dragStartWorldXDeg - deltaPx * this.degreesPerPixel;
+
+    // Drag up → reveal underground (drag up = deltaPy negative = cameraY increases)
+    const deltaPy = this.pointer.y - this.dragStartPointerY;
+    this.world.cameraY = this.clampCameraY(this.dragStartCameraY - deltaPy / this.zoom.zoom);
+
+    if (INERTIA_ENABLED) {
+      this.world.vDeg = (this.pointer.x - this.prevPointerX) * this.degreesPerPixel;
+      this.world.vY = (this.pointer.y - this.prevPointerY!) / this.zoom.zoom;
+    }
+    this.prevPointerX = this.pointer.x;
+    this.prevPointerY = this.pointer.y;
+  }
+
+  private applyFreeMotion(dt: number): void {
+    this.prevPointerX = null;
+    this.prevPointerY = null;
+
+    // Autopan overrides X-axis inertia so the slider holds a constant speed.
+    if (this.autoPanDegPerTick !== 0) {
+      this.world.xDeg += this.autoPanDegPerTick * dt;
+      this.world.vDeg = 0;
+    } else if (INERTIA_ENABLED) {
+      this.world.vDeg *= INERTIA_FRICTION;
+      this.world.xDeg = this.world.xDeg - this.world.vDeg * dt;
+    }
+
+    if (INERTIA_ENABLED) {
+      this.world.vY *= INERTIA_FRICTION;
+      const rawY = this.world.cameraY - this.world.vY * dt;
+      const clampedY = this.clampCameraY(rawY);
+      if (clampedY !== rawY) this.world.vY = 0;
+      this.world.cameraY = clampedY;
+    }
+  }
+
+  private stepWorld(dt: number) {
+    if (this.pointer.isDown) {
+      this.applyPointerDrag();
     } else {
-      this.prevPointerX = null;
-      this.prevPointerY = null;
-
-      // Autopan overrides X-axis inertia so the slider holds a constant speed.
-      if (this.autoPanDegPerTick !== 0) {
-        this.world.xDeg += this.autoPanDegPerTick * dt;
-        this.world.vDeg = 0;
-      } else if (INERTIA_ENABLED) {
-        this.world.vDeg *= INERTIA_FRICTION;
-        this.world.xDeg = this.world.xDeg - this.world.vDeg * dt;
-      }
-
-      if (INERTIA_ENABLED) {
-        this.world.vY *= INERTIA_FRICTION;
-        const rawY = this.world.cameraY - this.world.vY * dt;
-        const clampedY = this.clampCameraY(rawY);
-        if (clampedY !== rawY) this.world.vY = 0;
-        this.world.cameraY = clampedY;
-      }
+      this.applyFreeMotion(dt);
     }
   }
 
@@ -437,13 +443,16 @@ export function makeSkyLayer(skyGradient?: Array<{ offset: number; color: number
 // Pass `into` to update an existing container in-place (for palette switching).
 export const HAZE_TOP_Y = -250;
 
-export function makeHazeOverlay(
-  hazeAlpha: number,
-  color = HAZE_COLOR,
-  topY = HAZE_TOP_Y,
-  bottomY = 10,
-  into?: Container,
-): Container {
+type HazeOpts = {
+  alpha:    number;
+  color?:   number;
+  topY?:    number;
+  bottomY?: number;
+  into?:    Container;
+};
+
+export function makeHazeOverlay(opts: HazeOpts): Container {
+  const { alpha: hazeAlpha, color = HAZE_COLOR, topY = HAZE_TOP_Y, bottomY = 10, into } = opts;
   const r = (color >> 16) & 0xff;
   const g = (color >> 8)  & 0xff;
   const b =  color        & 0xff;

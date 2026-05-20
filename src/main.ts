@@ -77,7 +77,7 @@ for (let g = 0; g < FAR_GROUP_COUNT; g++) {
   const midT = (g * FAR_GROUP_SIZE + Math.floor(FAR_GROUP_SIZE / 2)) / (BACK_LAYER_COUNT - 1);
   const midMotionScale = BACK_SCALE_START + midT * (BACK_SCALE_END - BACK_SCALE_START);
   const hazeAlpha = 0.30 - midT * 0.24 + FAR_HAZE_BOOST;
-  const hazeContainer = makeHazeOverlay(hazeAlpha, PALETTES[DEFAULT_PALETTE_IDX].hazeColor);
+  const hazeContainer = makeHazeOverlay({ alpha: hazeAlpha, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
   hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha, underground: false });
   planet.addOverlay(hazeContainer, midMotionScale);
 }
@@ -106,7 +106,7 @@ for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
   }
 
   const hazeAlpha = 0.30 - t * 0.24;
-  const hazeContainer = makeHazeOverlay(hazeAlpha, PALETTES[DEFAULT_PALETTE_IDX].hazeColor);
+  const hazeContainer = makeHazeOverlay({ alpha: hazeAlpha, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
   hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha, underground: false });
   planet.addOverlay(hazeContainer, motionScale);
 }
@@ -119,7 +119,7 @@ planet.addLayer(makeGroundLayer(),   { behindAll: true });
 planet.addLayer(makeFrontLayer(planet.animators), { asInteractionLayer: true });
 planet.addActorLayer(makeActorLayer(1.0, 1.0));
 
-const frontHazeContainer = makeHazeOverlay(0.25, PALETTES[DEFAULT_PALETTE_IDX].hazeColor);
+const frontHazeContainer = makeHazeOverlay({ alpha: 0.25, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
 hazeEntries.push({ container: frontHazeContainer, alpha: 0.25, underground: false });
 planet.addOverlay(frontHazeContainer, 1.0);
 
@@ -167,7 +167,7 @@ function applyPalette(p: Palette): void {
     if (entry.underground) {
       makeUndergroundHazeOverlay(entry.alpha, p.caveHazeColor, entry.container);
     } else {
-      makeHazeOverlay(entry.alpha, p.hazeColor, HAZE_TOP_Y, 10, entry.container);
+      makeHazeOverlay({ alpha: entry.alpha, color: p.hazeColor, topY: HAZE_TOP_Y, bottomY: 10, into: entry.container });
     }
   }
 }
