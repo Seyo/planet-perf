@@ -81,6 +81,8 @@ function makeCallout(config: CalloutConfig): Container {
 
 // ─── Explosion ────────────────────────────────────────────────────────────────
 
+const SHOCK_MULT = 2.2;
+
 class Explosion {
   readonly deg: number;
   readonly y: number;
@@ -100,17 +102,27 @@ class Explosion {
   }
 
   draw() {
-    const t = clamp(this.age / DEFAULT_EXPLOSION_CONFIG.maxFrames, 0, 1);
+    const maxF  = DEFAULT_EXPLOSION_CONFIG.maxFrames;
+    const shockF = maxF * SHOCK_MULT;
+    const t      = clamp(this.age / maxF, 0, 1);
+    const ts     = clamp(this.age / shockF, 0, 1);
     this.gfx.clear();
-    if (t >= 1) return;
 
-    // Solid filled circle that starts small and expands while fading out
-    const r = t * this.maxRingRadius;
-    this.gfx.circle(0, 0, r).fill({ color: 0xffffff, alpha: 1 - t });
+    if (t < 1) {
+      const r = t * this.maxRingRadius;
+      this.gfx.circle(0, 0, r).fill({ color: 0xffffff, alpha: 1 - t });
+    }
+
+    if (ts < 1) {
+      const sr = ts * this.maxRingRadius * SHOCK_MULT;
+      this.gfx
+        .circle(0, 0, sr)
+        .stroke({ color: 0xffffff, alpha: (1 - ts) * 0.07, width: 2 });
+    }
   }
 
   isDone(): boolean {
-    return this.age >= DEFAULT_EXPLOSION_CONFIG.maxFrames;
+    return this.age >= DEFAULT_EXPLOSION_CONFIG.maxFrames * SHOCK_MULT;
   }
 }
 
