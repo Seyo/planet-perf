@@ -1,4 +1,4 @@
-import type { Palette, LightPalette } from './palettes';
+import type { Palette, LightPalette, Theme } from './palettes';
 
 type State = {
   xDeg: number;
@@ -34,16 +34,21 @@ export class DebugPanel {
   private lightBtnEls: HTMLButtonElement[] = [];
   private lightPalettes: LightPalette[] = [];
   private activeLightIdx = 0;
+  private themes: Theme[] = [];
+  private activeThemeIdx = -1;
+  private themeBtnEls: HTMLButtonElement[] = [];
   private togglesWrap!: HTMLElement;
   private toggles: Map<string, Toggle> = new Map();
 
   onPaletteChange?: (idx: number) => void;
   onAutopanChange?: (degPerTick: number) => void;
   onLightPaletteChange?: (idx: number) => void;
+  onThemeChange?: (paletteIdx: number, lightPaletteIdx: number) => void;
 
-  constructor(palettes: Palette[], lightPalettes: LightPalette[]) {
+  constructor(palettes: Palette[], lightPalettes: LightPalette[], themes: Theme[] = []) {
     this.palettes = palettes;
     this.lightPalettes = lightPalettes;
+    this.themes = themes;
     this.el = document.createElement('div');
     Object.assign(this.el.style, {
       position: 'fixed',
@@ -75,7 +80,9 @@ export class DebugPanel {
     this.el.appendChild(this.makeDivider());
     this.el.appendChild(this.makeColumn('PALETTE',  this.makePaletteButtons(palettes), '', false));
     this.el.appendChild(this.makeDivider());
-    this.el.appendChild(this.makeColumn('LIGHTS',   this.makeLightPaletteButtons(lightPalettes), '', true));
+    this.el.appendChild(this.makeColumn('LIGHTS',   this.makeLightPaletteButtons(lightPalettes)));
+    this.el.appendChild(this.makeDivider());
+    this.el.appendChild(this.makeColumn('THEME',    this.makeThemeSection(themes), '', true));
 
     document.body.appendChild(this.el);
   }
@@ -365,5 +372,113 @@ export class DebugPanel {
         });
       }
     });
+  }
+
+  private makeThemeSection(themes: Theme[]): HTMLElement {
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, { display: 'flex', flexDirection: 'column', gap: '6px' });
+
+    const btnRow = document.createElement('div');
+    Object.assign(btnRow.style, { display: 'flex', flexWrap: 'wrap', gap: '4px' });
+
+    themes.forEach((t, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = t.name;
+      Object.assign(btn.style, {
+        cursor: 'pointer',
+        fontFamily: 'monospace',
+        fontSize: '10px',
+        padding: '2px 6px',
+        borderRadius: '3px',
+        color: '#fff',
+        transition: 'none',
+      });
+
+      btn.addEventListener('click', () => {
+        this.activeThemeIdx = i;
+        this.setActivePalette(t.paletteIdx);
+        this.setActiveLightPalette(t.lightPaletteIdx);
+        this.refreshThemeButtonStyles();
+        this.onPaletteChange?.(t.paletteIdx);
+        this.onLightPaletteChange?.(t.lightPaletteIdx);
+        this.onThemeChange?.(t.paletteIdx, t.lightPaletteIdx);
+      });
+
+      this.themeBtnEls.push(btn);
+      btnRow.appendChild(btn);
+    });
+
+    this.refreshThemeButtonStyles();
+
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'copy theme prompt';
+    Object.assign(copyBtn.style, {
+      cursor: 'pointer',
+      fontFamily: 'monospace',
+      fontSize: '10px',
+      padding: '2px 8px',
+      borderRadius: '3px',
+      color: 'rgba(255,255,255,0.7)',
+      background: 'rgba(255,255,255,0.08)',
+      border: '1px solid rgba(255,255,255,0.2)',
+      transition: 'none',
+      alignSelf: 'flex-start',
+    });
+
+    copyBtn.addEventListener('click', () => {
+      const text = this.buildThemePrompt();
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = 'copied!';
+        setTimeout(() => { copyBtn.textContent = 'copy theme prompt'; }, 1500);
+      });
+    });
+
+    wrap.appendChild(btnRow);
+    wrap.appendChild(copyBtn);
+    return wrap;
+  }
+
+  private refreshThemeButtonStyles(): void {
+    this.themeBtnEls.forEach((btn, i) => {
+      const t = this.themes[i];
+      const p = this.palettes[t.paletteIdx];
+      const lp = this.lightPalettes[t.lightPaletteIdx];
+      if (i === this.activeThemeIdx) {
+        Object.assign(btn.style, {
+          background: hexToCss(p.hazeColor, 0.55),
+          border: `1px solid ${hexToCss(lp.warmColor, 1.0)}`,
+        });
+      } else {
+        Object.assign(btn.style, {
+          background: hexToCss(p.hazeColor, 0.22),
+          border: `1px solid ${hexToCss(lp.warmColor, 0.45)}`,
+        });
+      }
+    });
+  }
+
+  private buildThemePrompt(): string {
+    const p = this.palettes[this.activeIdx];
+    const lp = this.lightPalettes[this.activeLightIdx];
+    const toHex = (n: number) => '#' + n.toString(16).padStart(6, '0');
+    const stops = p.skyGradient.map(s => `    { offset: ${s.offset}, color: ${toHex(s.color)} }`).join('\n');
+    return [
+      `I'm working on planet-perf, a Pixi.js 2D circular world visualization.`,
+      ``,
+      `Current theme:`,
+      `  Palette: "${p.name}"`,
+      `    backgroundColor: ${toHex(p.backgroundColor)}`,
+      `    hazeColor: ${toHex(p.hazeColor)}`,
+      `    caveHazeColor: ${toHex(p.caveHazeColor)}`,
+      `    skyGradient:`,
+      stops,
+      ``,
+      `  Lights: "${lp.name}"`,
+      `    warmColor: ${toHex(lp.warmColor)}`,
+      `    coolColor: ${toHex(lp.coolColor)}`,
+      ``,
+      `Please create a new theme with the following feel: [describe what you want]`,
+      `Return a Palette object and a LightPalette object in the same format as above.`,
+    ].join('\n');
   }
 }

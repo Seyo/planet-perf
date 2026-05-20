@@ -15,7 +15,7 @@ import { makeActorLayer } from "./planet/render/actor-layer";
 import { makeShuttleLayer, ShuttleLayer } from "./planet/render/shuttle-layer";
 import { DebugPanel } from "./debug/debug-panel";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
-import { PALETTES, LIGHT_PALETTES } from "./debug/palettes";
+import { PALETTES, LIGHT_PALETTES, THEMES } from "./debug/palettes";
 import type { Palette } from "./debug/palettes";
 import { setLightColors } from "./planet/render/building-v2";
 import type { SliceLayer } from "./planet/render/slice-layer";
@@ -135,7 +135,7 @@ app.stage.addChild(yGridOverlay.container);
 
 // --- debug panel ---
 
-const debugPanel = new DebugPanel(PALETTES, LIGHT_PALETTES);
+const debugPanel = new DebugPanel(PALETTES, LIGHT_PALETTES, THEMES);
 debugPanel.setActivePalette(DEFAULT_PALETTE_IDX);
 
 // Standalone debug line — lives inside the sky layer so it follows its y-parallax.
@@ -176,6 +176,17 @@ debugPanel.onPaletteChange = (idx) => applyPalette(PALETTES[idx]);
 debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
 debugPanel.onLightPaletteChange = (idx) => {
   const lp = LIGHT_PALETTES[idx];
+  setLightColors(lp.warmColor, lp.coolColor);
+  for (const sl of shuttleLayers) sl.setLightColors(lp.warmColor, lp.coolColor);
+  for (const layer of bakedLayers) {
+    for (const slice of layer.ring.slices) {
+      slice.updateCacheTexture();
+    }
+  }
+};
+debugPanel.onThemeChange = (paletteIdx, lightPaletteIdx) => {
+  applyPalette(PALETTES[paletteIdx]);
+  const lp = LIGHT_PALETTES[lightPaletteIdx];
   setLightColors(lp.warmColor, lp.coolColor);
   for (const sl of shuttleLayers) sl.setLightColors(lp.warmColor, lp.coolColor);
   for (const layer of bakedLayers) {

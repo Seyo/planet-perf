@@ -7,12 +7,14 @@ export type LightPalette = {
 };
 
 export const LIGHT_PALETTES: LightPalette[] = [
-  { name: "City",   warmColor: 0xffee66, coolColor: 0x88ccff },
-  { name: "Neon",   warmColor: 0xff44cc, coolColor: 0x00ffcc },
-  { name: "Ember",  warmColor: 0xff7722, coolColor: 0xffaa44 },
-  { name: "Arctic", warmColor: 0xaaeeff, coolColor: 0x55aaff },
-  { name: "Toxic",  warmColor: 0x88ff44, coolColor: 0x44ffaa },
-  { name: "Retro",  warmColor: 0xff8800, coolColor: 0xff2288 },
+  { name: "City",       warmColor: 0xffee66, coolColor: 0x88ccff },
+  { name: "Neon",       warmColor: 0xff44cc, coolColor: 0x00ffcc },
+  { name: "Ember",      warmColor: 0xff7722, coolColor: 0xffaa44 },
+  { name: "Arctic",     warmColor: 0xaaeeff, coolColor: 0x55aaff },
+  { name: "Toxic",      warmColor: 0x88ff44, coolColor: 0x44ffaa },
+  { name: "Retro",      warmColor: 0xff8800, coolColor: 0xff2288 },
+  { name: "Rising Sun", warmColor: 0xdd1111, coolColor: 0xff3333 },
+  { name: "Cyberpunk",  warmColor: 0xff0066, coolColor: 0x00bbff },
 ];
 
 export type Palette = {
@@ -160,4 +162,47 @@ export const PALETTES: Palette[] = [
       { offset: 1, color: 0xd05820 }, // orange horizon
     ],
   },
+  {
+    name: "Japan",
+    backgroundColor: 0xd0d0cc,
+    hazeColor: 0xe8e8e4,
+    caveHazeColor: 0x606060,
+    skyGradient: [
+      { offset: 0,    color: 0x000005 },
+      { offset: 0.80, color: 0x606068 },
+      { offset: 0.90, color: 0xa0a0a0 },
+      { offset: 0.95, color: 0xc8c8c4 },
+      { offset: 1,    color: 0xd0d0cc },
+    ],
+  },
+  {
+    name: "Cyberpunk",
+    backgroundColor: 0x0a000e,
+    hazeColor: 0x700090,
+    caveHazeColor: 0x08000c,
+    skyGradient: [
+      { offset: 0,    color: 0x000001 },
+      { offset: 0.80, color: 0x030005 },
+      { offset: 0.90, color: 0x0e0018 },
+      { offset: 0.94, color: 0x250038 },
+      { offset: 0.97, color: 0x4a0060 },
+      { offset: 1,    color: 0x0a000e },
+    ],
+  },
+];
+
+export type Theme = {
+  name: string;
+  paletteIdx: number;
+  lightPaletteIdx: number;
+};
+
+export const THEMES: Theme[] = [
+  { name: "Japan",     paletteIdx: 11, lightPaletteIdx: 6 },
+  { name: "Cyberpunk", paletteIdx: 12, lightPaletteIdx: 7 },
+  { name: "Sunrise",   paletteIdx: 10, lightPaletteIdx: 0 },
+  { name: "Ember",     paletteIdx: 5,  lightPaletteIdx: 2 },
+  { name: "Neon",      paletteIdx: 0,  lightPaletteIdx: 1 },
+  { name: "Arctic",    paletteIdx: 9,  lightPaletteIdx: 3 },
+  { name: "Toxic",     paletteIdx: 7,  lightPaletteIdx: 4 },
 ];
