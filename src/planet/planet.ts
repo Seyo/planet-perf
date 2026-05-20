@@ -11,6 +11,7 @@ export interface ActorLike {
 }
 import { SliceLayer } from "./render/slice-layer";
 import { SliceRing } from "./render/slice-ring";
+import type { SliceFactory } from "./render/slice-ring";
 import { makeBackCityFactory, makeDeepCoreFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
 import type { Animator } from "./render/layer-factories";
 
@@ -290,16 +291,21 @@ export function makeFrontLayer(animators?: Animator[]) {
 }
 
 type BackCityConfig = {
-  motionScale?:   number;
-  yMotionScale?:  number;
-  baseColor?:     number;
-  density?:       number;
-  minH?:          number;
-  maxH?:          number;
-  salt?:          number;
-  underground?:   boolean;
+  motionScale?:    number;
+  yMotionScale?:   number;
+  baseColor?:      number;
+  density?:        number;
+  minH?:           number;
+  maxH?:           number;
+  salt?:           number;
+  underground?:    boolean;
   undergroundDim?: number;
+  bakeResolution?: number;
 };
+
+// Group this many 5° slices into one baked super-slice.
+// 72 / 9 = 8 super-slices of 45° each — clean division, no remainder.
+const BACK_SUPER_SIZE = 9;
 
 export function makeBackCityLayer(config: BackCityConfig = {}) {
   const {
@@ -312,13 +318,30 @@ export function makeBackCityLayer(config: BackCityConfig = {}) {
     salt           = 202,
     underground    = false,
     undergroundDim = 0,
+    bakeResolution = 1,
   } = config;
 
-  const ring = new SliceRing(
-    72, 5, 120,
-    makeBackCityFactory({ sliceWidthPxAtZoom1: 120, baseColor, density, minH, maxH, salt, underground, undergroundDim }),
-    true,
-  );
+  const singleWidth  = 120;
+  const singleDeg    = 5;
+  const superCount   = 72 / BACK_SUPER_SIZE;           // 8
+  const superDeg     = singleDeg  * BACK_SUPER_SIZE;   // 45°
+  const superWidth   = singleWidth * BACK_SUPER_SIZE;  // 1080px
+
+  const singleFactory = makeBackCityFactory({
+    sliceWidthPxAtZoom1: singleWidth, baseColor, density, minH, maxH, salt, underground, undergroundDim,
+  });
+
+  const superFactory: SliceFactory = (superIndex) => {
+    const root = new Container();
+    for (let j = 0; j < BACK_SUPER_SIZE; j++) {
+      const content = singleFactory(superIndex * BACK_SUPER_SIZE + j, 0);
+      content.x = j * singleWidth;
+      root.addChild(content);
+    }
+    return root;
+  };
+
+  const ring = new SliceRing(superCount, superDeg, superWidth, superFactory, bakeResolution);
   return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
 }
 

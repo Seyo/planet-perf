@@ -14,7 +14,7 @@ export class SliceRing {
     public readonly degPerSlice: number,
     public readonly sliceWidthPxAtZoom1: number,
     private makeSlice: SliceFactory,
-    private readonly bake = false,
+    private readonly bakeResolution = 0,
   ) {
     this.basePPD = sliceWidthPxAtZoom1 / degPerSlice;
     this.build();
@@ -43,7 +43,7 @@ export class SliceRing {
       // during pan stops dominating the frame. Resolution 2 keeps the cache
       // crisp at moderate zoom-ins while bounding GPU memory; layers that opt
       // in must not animate their content.
-      if (this.bake) slice.cacheAsTexture({ resolution: 2 });
+      if (this.bakeResolution > 0) slice.cacheAsTexture({ resolution: this.bakeResolution });
     }
   }
 

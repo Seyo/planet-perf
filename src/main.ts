@@ -62,7 +62,8 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
 
   const isUnderground = i >= BACK_LAYER_COUNT - 10;
   const ugT = isUnderground ? (i - (BACK_LAYER_COUNT - 10)) / 9 : 0;
-  const backLayer = makeBackCityLayer({ motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: isUnderground, undergroundDim: isUnderground ? 0.5 * (1 - ugT) : 0 });
+  const bakeResolution = i >= BACK_LAYER_COUNT - 5 ? 2 : 1;
+  const backLayer = makeBackCityLayer({ motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: isUnderground, undergroundDim: isUnderground ? 0.5 * (1 - ugT) : 0, bakeResolution });
   bakedLayers.push(backLayer);
   planet.addLayer(backLayer, { behindAll: true });
   if (i >= ACTOR_LAYER_START) {
