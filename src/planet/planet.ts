@@ -3,6 +3,12 @@ import { Container, FillGradient, Graphics } from "pixi.js";
 import { PointerX } from "./input/pointer-x";
 import { WheelZoom } from "./input/wheel-zoom";
 import { ActorLayer } from "./render/actor-layer";
+
+export interface ActorLike {
+  container: Container;
+  update(dt: number): void;
+  layout(cameraDeg: number, zoom: number, viewWidthPx: number, cameraY: number): void;
+}
 import { SliceLayer } from "./render/slice-layer";
 import { SliceRing } from "./render/slice-ring";
 import { makeBackCityFactory, makeDeepCoreFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
@@ -42,7 +48,7 @@ export class Planet {
   private prevPointerY: number | null = null;
 
   private layers: SliceLayer[] = [];
-  private actorLayers: ActorLayer[] = [];
+  private actorLayers: ActorLike[] = [];
   private overlays: Array<{ container: Container; yMotionScale: number }> = [];
   private interactionLayer!: SliceLayer;
 
@@ -78,7 +84,7 @@ export class Planet {
     }
   }
 
-  addActorLayer(layer: ActorLayer) {
+  addActorLayer(layer: ActorLike) {
     this.actorLayers.push(layer);
     this.root.addChild(layer.container);
   }
