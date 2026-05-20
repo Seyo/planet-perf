@@ -112,10 +112,16 @@ debugPanel.setActivePalette(DEFAULT_PALETTE_IDX);
 const skyBottomLine = new Graphics().rect(-5000, 4, 10000, 2).fill(0xff0000);
 skyBottomLine.visible = false;
 activeSkyLayer.container.addChild(skyBottomLine);
+const hazeToggle = {
+  get visible() { return hazeEntries[0]?.container.visible ?? true; },
+  set visible(v: boolean) { for (const e of hazeEntries) e.container.visible = v; },
+};
+
 debugPanel.registerToggle('sky-bottom',    'Sky bottom edge', skyBottomLine);
 debugPanel.registerToggle('slice-lines',  'Slice lines',     sliceOverlay.container);
 debugPanel.registerToggle('y-grid',       'Y grid',          yGridOverlay.container);
 debugPanel.registerToggle('shuttle-info', 'Shuttle info',    shuttleDebugToggle);
+debugPanel.registerToggle('haze',         'Haze',            hazeToggle);
 
 function applyPalette(p: Palette): void {
   app.renderer.background.color = p.backgroundColor;

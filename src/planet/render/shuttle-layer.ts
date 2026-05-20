@@ -87,13 +87,16 @@ class Shuttle {
   private cruiseY        = -250;
   private cruiseDegLimit = 80;
   private traveledDeg    = 0;
-  private readonly trail: Array<{ deg: number; y: number; vDeg: number }> = [];
+  private readonly trail: Array<{ deg: number; y: number; vDeg: number }>;
+  private trailHead  = 0;
+  private trailCount = 0;
   private readonly halfLen: number;
 
   constructor(warmColor: number, coolColor: number, label: string) {
     this.deg      = Math.random() * 360;
     this.halfLen  = 3 + Math.random() * 2;
     this.maxSpeed = MAX_HORIZ_SPEED * (0.75 + Math.random() * 0.5); // 75–125% of base
+    this.trail    = Array.from({ length: MAX_TRAIL_POINTS }, () => ({ deg: 0, y: 0, vDeg: 0 }));
     this.trailGfx = new Graphics();
 
     const body   = new Graphics().rect(-this.halfLen, -0.5, this.halfLen * 2, 1).fill(0x222233);
@@ -125,7 +128,8 @@ class Shuttle {
     this.vY              = 0;
     this.y               = SURFACE_Y;
     this.waitTicks       = WAIT_TICKS_MIN + Math.floor(Math.random() * (WAIT_TICKS_MAX - WAIT_TICKS_MIN));
-    this.trail.length    = 0;
+    this.trailHead       = 0;
+    this.trailCount      = 0;
     this.bodyGfx.rotation = 0; // rest flat on the ground
   }
 
@@ -181,8 +185,12 @@ class Shuttle {
       return;
     }
 
-    this.trail.unshift({ deg: this.deg, y: this.y, vDeg: this.vDeg });
-    if (this.trail.length > MAX_TRAIL_POINTS) this.trail.pop();
+    this.trailHead = (this.trailHead - 1 + MAX_TRAIL_POINTS) % MAX_TRAIL_POINTS;
+    const slot = this.trail[this.trailHead];
+    slot.deg  = this.deg;
+    slot.y    = this.y;
+    slot.vDeg = this.vDeg;
+    if (this.trailCount < MAX_TRAIL_POINTS) this.trailCount++;
 
     this.bodyGfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
   }
@@ -192,17 +200,18 @@ class Shuttle {
     if (this.phase === 'grounded' || this.trail.length < 2) return;
 
     const speedPx    = Math.sqrt((this.vDeg * BASE_PPD) ** 2 + this.vY ** 2);
-    const visibleLen = Math.min(this.trail.length, Math.floor(speedPx * TRAIL_SPEED_FACTOR));
+    const visibleLen = Math.min(this.trailCount, Math.floor(speedPx * TRAIL_SPEED_FACTOR));
     if (visibleLen < 2) return;
 
     for (let i = 0; i < visibleLen; i++) {
+      const pt    = this.trail[(this.trailHead + i) % MAX_TRAIL_POINTS];
       const t     = 1 - i / (visibleLen - 1);
       const alpha = t;
       const color = lerpColor(coolColor, warmColor, t);
-      const lx    = normalize180(this.trail[i].deg - this.deg) * ppd;
-      const ly    = this.trail[i].y - this.y;
-      const w     = Math.max(1, Math.ceil(Math.abs(this.trail[i].vDeg * ppd)));
-      const x0    = this.trail[i].vDeg >= 0 ? lx - w : lx;
+      const lx    = normalize180(pt.deg - this.deg) * ppd;
+      const ly    = pt.y - this.y;
+      const w     = Math.max(1, Math.ceil(Math.abs(pt.vDeg * ppd)));
+      const x0    = pt.vDeg >= 0 ? lx - w : lx;
       this.trailGfx.rect(x0, ly - 0.5, w, 1).fill({ color, alpha });
     }
   }
