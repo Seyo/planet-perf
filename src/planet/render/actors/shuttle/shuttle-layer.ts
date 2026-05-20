@@ -1,38 +1,21 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { normalize180, clamp, lerpColor } from "../../../math";
+import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, type FlightConfig } from './physics';
 
 const BASE_PPD = 24;
 const SURFACE_Y = -2;
-
-export const MAX_CLIMB_RATE   = 0.9;
-export const MAX_DESCENT_RATE = 1.2;
-export const MAX_VERT_ACCEL   = 0.035;
-export const MAX_HORIZ_SPEED  = 0.22;   // deg/frame base — each shuttle varies ±25%
-export const MAX_TURN_ACCEL   = 0.004;
-
-const CRUISE_Y_MIN     = -320;
-const CRUISE_Y_MAX     = -180;
-const CRUISE_DEG_MIN   = 50;
-const CRUISE_DEG_MAX   = 140;
-const LEVEL_THRESHOLD  = 15;
-const LAND_THRESHOLD   = 4;
-const WAIT_TICKS_MIN   = 120;
-const WAIT_TICKS_MAX   = 360;
-const MAX_TRAIL_POINTS   = 100;
-const TRAIL_SPEED_FACTOR = 20;
-
-const MAX_EXPLOSION_FRAMES = 90;
-const AIR_RING_RADIUS      = 90;
-const GROUND_RING_RADIUS   = 50;
-const DEBRIS_GRAVITY       = 0.04;
-const DEBRIS_TRAIL_POINTS  = 120;
-const DEBRIS_LINGER_FRAMES = 80;
-const LAYOUT_CULL_PAD      = 400;
+const LAYOUT_CULL_PAD = 400;
 
 // Callout geometry (world-space units)
-const CALLOUT_RING  = 5;   // selection circle radius
-const CALLOUT_DIAG  = 15;  // 45° leg length
-const CALLOUT_HORIZ = 18;  // horizontal leg length
+const CALLOUT_RING  = 5;
+const CALLOUT_DIAG  = 15;
+const CALLOUT_HORIZ = 18;
+
+export const MAX_CLIMB_RATE   = DEFAULT_FLIGHT_CONFIG.maxClimbRate;
+export const MAX_DESCENT_RATE = DEFAULT_FLIGHT_CONFIG.maxDescentRate;
+export const MAX_VERT_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxVertAccel;
+export const MAX_HORIZ_SPEED  = DEFAULT_FLIGHT_CONFIG.maxHorizSpeed;
+export const MAX_TURN_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxTurnAccel;
 
 type Phase = 'grounded' | 'ascending' | 'cruising' | 'descending' | 'dying';
 
@@ -105,7 +88,7 @@ class Explosion {
   private readonly maxRingRadius: number;
   readonly gfx: Graphics;
 
-  constructor(pos: DegY, maxRingRadius = AIR_RING_RADIUS) {
+  constructor(pos: DegY, maxRingRadius = DEFAULT_EXPLOSION_CONFIG.airRingRadius) {
     this.deg = pos.deg;
     this.y   = pos.y;
     this.maxRingRadius = maxRingRadius;
@@ -117,7 +100,7 @@ class Explosion {
   }
 
   draw() {
-    const t = clamp(this.age / MAX_EXPLOSION_FRAMES, 0, 1);
+    const t = clamp(this.age / DEFAULT_EXPLOSION_CONFIG.maxFrames, 0, 1);
     this.gfx.clear();
     if (t >= 1) return;
 
@@ -127,7 +110,7 @@ class Explosion {
   }
 
   isDone(): boolean {
-    return this.age >= MAX_EXPLOSION_FRAMES;
+    return this.age >= DEFAULT_EXPLOSION_CONFIG.maxFrames;
   }
 }
 
@@ -153,7 +136,10 @@ class Debris {
     this.y    = origin.y;
     this.vDeg = origin.vDeg;
     this.vY   = origin.vY;
-    this.trail = Array.from({ length: DEBRIS_TRAIL_POINTS }, () => ({ deg: 0, y: 0 }));
+    this.trail = Array.from(
+      { length: DEFAULT_EXPLOSION_CONFIG.debrisTrailPoints },
+      () => ({ deg: 0, y: 0 }),
+    );
 
     this.trailGfx = new Graphics();
     this.bodyGfx  = new Graphics()
@@ -170,15 +156,16 @@ class Debris {
       return;
     }
 
-    this.vY  += DEBRIS_GRAVITY * tick.dt;
+    const len = this.trail.length;
+    this.vY  += DEFAULT_EXPLOSION_CONFIG.debrisGravity * tick.dt;
     this.deg  = ((this.deg + this.vDeg * tick.dt) % 360 + 360) % 360;
     this.y   += this.vY * tick.dt;
 
-    this.trailHead = (this.trailHead - 1 + DEBRIS_TRAIL_POINTS) % DEBRIS_TRAIL_POINTS;
+    this.trailHead = (this.trailHead - 1 + len) % len;
     const slot = this.trail[this.trailHead];
     slot.deg = this.deg;
     slot.y   = this.y;
-    if (this.trailCount < DEBRIS_TRAIL_POINTS) this.trailCount++;
+    if (this.trailCount < len) this.trailCount++;
 
     this.bodyGfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
 
@@ -192,14 +179,17 @@ class Debris {
     this.trailGfx.clear();
     if (this.trailCount < 2) return;
 
-    const linger     = this.landed ? clamp(this.lingerTick / DEBRIS_LINGER_FRAMES, 0, 1) : 0;
-    const fadeAlpha  = 1 - linger;
+    const linger    = this.landed
+      ? clamp(this.lingerTick / DEFAULT_EXPLOSION_CONFIG.debrisLingerFrames, 0, 1)
+      : 0;
+    const fadeAlpha = 1 - linger;
     if (fadeAlpha <= 0) return;
 
+    const len    = this.trail.length;
     const visLen = this.trailCount;
     for (let i = 0; i < visLen - 1; i++) {
-      const ptA = this.trail[(this.trailHead + i)     % DEBRIS_TRAIL_POINTS];
-      const ptB = this.trail[(this.trailHead + i + 1) % DEBRIS_TRAIL_POINTS];
+      const ptA = this.trail[(this.trailHead + i)     % len];
+      const ptB = this.trail[(this.trailHead + i + 1) % len];
       const t   = 1 - i / (visLen - 1);
 
       const color = getDebrisTrailColor(t);
@@ -219,7 +209,7 @@ class Debris {
   }
 
   isDone(): boolean {
-    return this.landed && this.lingerTick >= DEBRIS_LINGER_FRAMES;
+    return this.landed && this.lingerTick >= DEFAULT_EXPLOSION_CONFIG.debrisLingerFrames;
   }
 }
 
@@ -236,6 +226,7 @@ class Shuttle {
   private readonly engGlow: Graphics;
   private readonly callout: Container;
   private readonly maxSpeed: number;
+  private readonly config: FlightConfig;
   private warmColor: number;
   private coolColor: number;
   private phase: Phase = 'grounded';
@@ -257,13 +248,17 @@ class Shuttle {
     return this.phase !== 'grounded' && this.phase !== 'dying';
   }
 
-  constructor(colors: ShuttleColors, label: string) {
+  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG) {
+    this.config    = config;
     this.deg       = Math.random() * 360;
     this.halfLen   = 3 + Math.random() * 2;
-    this.maxSpeed  = MAX_HORIZ_SPEED * (0.75 + Math.random() * 0.5); // 75–125% of base
+    this.maxSpeed  = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
     this.warmColor = colors.warm;
     this.coolColor = colors.cool;
-    this.trail     = Array.from({ length: MAX_TRAIL_POINTS }, () => ({ deg: 0, y: 0, vDeg: 0 }));
+    this.trail     = Array.from(
+      { length: config.maxTrailPoints },
+      () => ({ deg: 0, y: 0, vDeg: 0 }),
+    );
     this.trailGfx  = new Graphics();
 
     const body   = new Graphics().rect(-this.halfLen, -0.5, this.halfLen * 2, 1).fill(0x222233);
@@ -292,7 +287,8 @@ class Shuttle {
     this.vDeg             = 0;
     this.vY               = 0;
     this.y                = SURFACE_Y;
-    this.waitTicks        = WAIT_TICKS_MIN + Math.floor(Math.random() * (WAIT_TICKS_MAX - WAIT_TICKS_MIN));
+    this.waitTicks        = this.config.waitTicksMin
+      + Math.floor(Math.random() * (this.config.waitTicksMax - this.config.waitTicksMin));
     this.trailHead        = 0;
     this.trailCount       = 0;
     this.bodyGfx.visible  = true;
@@ -301,8 +297,10 @@ class Shuttle {
 
   private launch() {
     this.dirSign        = Math.random() < 0.5 ? 1 : -1;
-    this.cruiseY        = CRUISE_Y_MIN + Math.random() * (CRUISE_Y_MAX - CRUISE_Y_MIN);
-    this.cruiseDegLimit = CRUISE_DEG_MIN + Math.random() * (CRUISE_DEG_MAX - CRUISE_DEG_MIN);
+    this.cruiseY        = this.config.cruiseYMin
+      + Math.random() * (this.config.cruiseYMax - this.config.cruiseYMin);
+    this.cruiseDegLimit = this.config.cruiseDegMin
+      + Math.random() * (this.config.cruiseDegMax - this.config.cruiseDegMin);
     this.traveledDeg    = 0;
     this.willExplode    = Math.random() < 0.25;
     this.phase          = 'ascending';
@@ -318,16 +316,17 @@ class Shuttle {
     this.y          +=  -this.halfLen * Math.sin(rot);
 
     // Record one final trail point at the engine position so the trail tip is flush
-    this.trailHead = (this.trailHead - 1 + MAX_TRAIL_POINTS) % MAX_TRAIL_POINTS;
+    const len = this.trail.length;
+    this.trailHead = (this.trailHead - 1 + len) % len;
     this.trail[this.trailHead].deg  = this.deg;
     this.trail[this.trailHead].y    = this.y;
     this.trail[this.trailHead].vDeg = this.vDeg;
-    if (this.trailCount < MAX_TRAIL_POINTS) this.trailCount++;
+    if (this.trailCount < len) this.trailCount++;
 
     this.pendingExplosion = { deg: this.deg, y: this.y, vDeg: this.vDeg, vY: this.vY };
 
     const speedPx        = Math.sqrt((this.vDeg * BASE_PPD) ** 2 + this.vY ** 2);
-    this.dyingTrailLen   = Math.min(this.trailCount, Math.floor(speedPx * TRAIL_SPEED_FACTOR));
+    this.dyingTrailLen   = Math.min(this.trailCount, Math.floor(speedPx * this.config.trailSpeedFactor));
     this.dyingTrailMax   = this.dyingTrailLen;
     this.phase           = 'dying';
     this.vDeg            = 0;
@@ -364,23 +363,36 @@ class Shuttle {
 
   private applyPhysics(tick: Tick): void {
     const { targetY, pdGain } = this.vertControlParams();
-    const targetVY = clamp((targetY - this.y) * pdGain, -MAX_CLIMB_RATE, MAX_DESCENT_RATE);
-    this.vY += clamp(targetVY - this.vY, -MAX_VERT_ACCEL * tick.dt, MAX_VERT_ACCEL * tick.dt);
+    const targetVY = clamp(
+      (targetY - this.y) * pdGain,
+      -this.config.maxClimbRate,
+      this.config.maxDescentRate,
+    );
+    this.vY += clamp(
+      targetVY - this.vY,
+      -this.config.maxVertAccel * tick.dt,
+      this.config.maxVertAccel * tick.dt,
+    );
 
     const targetVDeg = this.horizTargetSpeed() * this.dirSign;
-    this.vDeg += clamp(targetVDeg - this.vDeg, -MAX_TURN_ACCEL * tick.dt, MAX_TURN_ACCEL * tick.dt);
+    this.vDeg += clamp(
+      targetVDeg - this.vDeg,
+      -this.config.maxTurnAccel * tick.dt,
+      this.config.maxTurnAccel * tick.dt,
+    );
 
     this.deg = ((this.deg + this.vDeg * tick.dt) % 360 + 360) % 360;
     this.y  += this.vY * tick.dt;
   }
 
   private recordTrail(): void {
-    this.trailHead = (this.trailHead - 1 + MAX_TRAIL_POINTS) % MAX_TRAIL_POINTS;
+    const len = this.trail.length;
+    this.trailHead = (this.trailHead - 1 + len) % len;
     const slot = this.trail[this.trailHead];
     slot.deg  = this.deg;
     slot.y    = this.y;
     slot.vDeg = this.vDeg;
-    if (this.trailCount < MAX_TRAIL_POINTS) this.trailCount++;
+    if (this.trailCount < len) this.trailCount++;
   }
 
   // Returns true when the shuttle has just triggered an explosion (caller must return early).
@@ -397,11 +409,11 @@ class Shuttle {
   private updateFlying(tick: Tick): void {
     this.applyPhysics(tick);
 
-    if (this.phase === 'ascending' && Math.abs(this.y - this.cruiseY) < LEVEL_THRESHOLD) {
+    if (this.phase === 'ascending' && Math.abs(this.y - this.cruiseY) < this.config.levelThreshold) {
       this.phase = 'cruising';
     }
     if (this.phase === 'cruising' && this.checkCruisingPhase(tick)) return;
-    if (this.phase === 'descending' && this.y >= SURFACE_Y - LAND_THRESHOLD) {
+    if (this.phase === 'descending' && this.y >= SURFACE_Y - this.config.landThreshold) {
       this.startWait();
       return;
     }
@@ -428,12 +440,13 @@ class Shuttle {
     const visibleLen = dying
       ? Math.max(0, Math.ceil(this.dyingTrailLen))
       : Math.min(this.trailCount, Math.floor(
-          Math.sqrt((this.vDeg * view.ppd) ** 2 + this.vY ** 2) * TRAIL_SPEED_FACTOR));
+          Math.sqrt((this.vDeg * view.ppd) ** 2 + this.vY ** 2) * this.config.trailSpeedFactor));
     if (visibleLen < 2) return;
 
+    const len = this.trail.length;
     for (let i = 0; i < visibleLen - 1; i++) {
-      const ptA  = this.trail[(this.trailHead + i)     % MAX_TRAIL_POINTS];
-      const ptB  = this.trail[(this.trailHead + i + 1) % MAX_TRAIL_POINTS];
+      const ptA  = this.trail[(this.trailHead + i)     % len];
+      const ptB  = this.trail[(this.trailHead + i + 1) % len];
       const t    = 1 - i / (visibleLen - 1);
       const color = lerpColor(this.coolColor, this.warmColor, t);
       const ax   = normalize180(ptA.deg - this.deg) * view.ppd;
@@ -476,7 +489,7 @@ export class ShuttleLayer {
   }
 
   private spawnAirExplosion(origin: ExplosionOrigin) {
-    const exp = new Explosion(origin, AIR_RING_RADIUS);
+    const exp = new Explosion(origin, DEFAULT_EXPLOSION_CONFIG.airRingRadius);
     this.container.addChild(exp.gfx);
     this.explosions.push(exp);
 
@@ -495,7 +508,7 @@ export class ShuttleLayer {
   }
 
   private spawnGroundExplosion(pos: DegY) {
-    const exp = new Explosion(pos, GROUND_RING_RADIUS);
+    const exp = new Explosion(pos, DEFAULT_EXPLOSION_CONFIG.groundRingRadius);
     this.container.addChild(exp.gfx);
     this.explosions.push(exp);
   }
