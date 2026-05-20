@@ -17,7 +17,7 @@ import { DebugPanel } from "./debug/debug-panel";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
 import { PALETTES, LIGHT_PALETTES, THEMES } from "./debug/palettes";
 import type { Palette } from "./debug/palettes";
-import { setLightColors } from "./planet/render/building-v2";
+import { setLightColors } from "./planet/render/buildings";
 import type { SliceLayer } from "./planet/render/slice-layer";
 
 const DEFAULT_PALETTE_IDX = PALETTES.findIndex(p => p.name === 'Sunrise');
