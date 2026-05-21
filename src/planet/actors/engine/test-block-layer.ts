@@ -23,9 +23,8 @@ export const DEFAULT_TEST_BLOCK_CONFIG: TestBlockConfig = {
 export class TestBlockLayer implements ActorLike {
   readonly container = new Container();
   private readonly blockGfx = new Container();
-  private readonly bodyCtr  = new Container(); // rotated independently from trail
+  private readonly bodyCtr  = new Container();
   private readonly trailGfx = new Graphics();
-  private readonly glowGfx  = new Graphics();
   private readonly noseGfx  = new Graphics();
   private trail: EngineTrail;
   private config: TestBlockConfig;
@@ -40,20 +39,16 @@ export class TestBlockLayer implements ActorLike {
       .rect(-HALF_LEN, -0.5, HALF_LEN * 2, 1)
       .fill(0x222233);
 
-    this.rebuildColors();
-    this.bodyCtr.addChild(body, this.glowGfx, this.noseGfx);
+    this.rebuildNose();
+    this.bodyCtr.addChild(body, this.noseGfx);
     this.blockGfx.addChild(this.trailGfx, this.bodyCtr);
     this.container.addChild(this.blockGfx);
   }
 
-  private rebuildColors(): void {
-    const { warmColor, coolColor, engineIntensity } = this.config.engine;
-    this.glowGfx.clear()
-      .circle(-HALF_LEN, 0, 2)
-      .fill({ color: warmColor, alpha: Math.min(0.25 * engineIntensity, 0.9) });
+  private rebuildNose(): void {
     this.noseGfx.clear()
       .circle(HALF_LEN, 0, 0.5)
-      .fill(coolColor);
+      .fill(this.config.engine.coolColor);
   }
 
   get positionDeg(): number { return this.deg; }
@@ -64,7 +59,7 @@ export class TestBlockLayer implements ActorLike {
         && patch.engine.maxTrailPoints !== this.config.engine.maxTrailPoints;
       Object.assign(this.config.engine, patch.engine);
       if (needsReset) this.resetTrail();
-      this.rebuildColors();
+      this.rebuildNose();
     }
     if (patch.speedDeg !== undefined) this.config.speedDeg = patch.speedDeg;
     if (patch.cruiseY  !== undefined) this.config.cruiseY  = patch.cruiseY;

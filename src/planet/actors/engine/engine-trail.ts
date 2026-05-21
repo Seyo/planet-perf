@@ -3,12 +3,49 @@ import { lerpColor, normalize180 } from '../../math';
 import type { EngineConfig } from './engine-config';
 
 type TrailPoint = { deg: number; y: number };
+type BloomSeg   = { ax: number; ay: number; bx: number; by: number; first: boolean };
+type CapSpec    = { x: number; y: number; r: number; angle: number };
 
 export type DrawView = { ppd: number; anchorDeg: number; anchorY: number; speedPx: number; fadeFactor?: number };
+
+const BLOOM_INNER_ALPHA = 0.50;
+const BLOOM_OUTER_ALPHA = 0.20;
 
 function glowAlpha(t: number): number {
   const hot = Math.max(0, t - 0.5) / 0.5;
   return hot * hot * 0.3;
+}
+
+function bloomLayerAlpha(layer: number, totalLayers: number): number {
+  const frac = totalLayers > 1 ? layer / (totalLayers - 1) : 0;
+  return BLOOM_INNER_ALPHA + (BLOOM_OUTER_ALPHA - BLOOM_INNER_ALPHA) * frac;
+}
+
+// Draws one forward-facing semicircle (the nose cap) for one bloom layer.
+// The arc sweeps clockwise from (angle - π/2) to (angle + π/2); fill() auto-closes
+// the shape with a straight diameter line.
+function drawCapSemi(gfx: Graphics, cap: CapSpec, color: number, alpha: number): void {
+  const a0 = cap.angle - Math.PI / 2;
+  const a1 = cap.angle + Math.PI / 2;
+  gfx.moveTo(cap.x + cap.r * Math.cos(a0), cap.y + cap.r * Math.sin(a0))
+     .arc(cap.x, cap.y, cap.r, a0, a1, false)
+     .fill({ color, alpha });
+}
+
+function drawBloom(gfx: Graphics, seg: BloomSeg, glow: number, cfg: EngineConfig): void {
+  // Nose direction: from (bx,by) toward (ax,ay) — opposite of trail.
+  const noseAngle = seg.first
+    ? Math.atan2(seg.ay - seg.by, seg.ax - seg.bx)
+    : 0;
+  for (let layer = cfg.bloomLayers - 1; layer >= 0; layer--) {
+    const alpha = glow * bloomLayerAlpha(layer, cfg.bloomLayers);
+    if (alpha <= 0.005) continue;
+    const w = cfg.trailWidth + 2 + layer;
+    gfx.moveTo(seg.ax, seg.ay).lineTo(seg.bx, seg.by)
+      .stroke({ color: cfg.warmColor, alpha, width: w, cap: 'butt' });
+    if (seg.first)
+      drawCapSemi(gfx, { x: seg.ax, y: seg.ay, r: w / 2, angle: noseAngle }, cfg.warmColor, alpha);
+  }
 }
 
 export class EngineTrail {
@@ -52,12 +89,8 @@ export class EngineTrail {
       const by   = ptB.y - anchorY;
 
       const glow = glowAlpha(t) * cfg.engineIntensity * fadeFactor;
-      if (glow > 0.005) {
-        gfx.moveTo(ax, ay).lineTo(bx, by)
-          .stroke({ color: cfg.warmColor, alpha: glow * 0.20, width: 12, cap: 'butt' });
-        gfx.moveTo(ax, ay).lineTo(bx, by)
-          .stroke({ color: cfg.warmColor, alpha: glow * 0.45, width: 5,  cap: 'butt' });
-      }
+      if (glow > 0.005) drawBloom(gfx, { ax, ay, bx, by, first: i === 0 }, glow, cfg);
+
       gfx.moveTo(ax, ay).lineTo(bx, by)
         .stroke({ color, alpha: t * fadeFactor, width: cfg.trailWidth });
     }

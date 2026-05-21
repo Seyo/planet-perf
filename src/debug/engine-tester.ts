@@ -23,7 +23,8 @@ const SECTIONS: [string, SliderSpec[]][] = [
     { key: 'trailWidth',       label: 'trail width',   min: 0.5, max: 4,   step: 0.5 },
   ]],
   ['ENGINE', [
-    { key: 'engineIntensity', label: 'engine intensity', min: 0, max: 4, step: 0.1 },
+    { key: 'engineIntensity', label: 'engine intensity', min: 0,  max: 4,  step: 0.1 },
+    { key: 'bloomLayers',     label: 'bloom layers',     min: 1,  max: 12, step: 1   },
   ]],
 ];
 
