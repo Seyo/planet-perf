@@ -593,8 +593,11 @@ export class ShuttleLayer {
   }
 
   annihilate(): void {
-    for (const s of this.shuttles) {
-      if (s.isFlying) s.triggerExplosion();
+    const flying = this.shuttles.filter(s => s.isFlying);
+    let delay = 0;
+    for (const s of flying) {
+      delay += 250;
+      setTimeout(() => { if (s.isFlying) s.triggerExplosion(); }, delay);
     }
   }
 
