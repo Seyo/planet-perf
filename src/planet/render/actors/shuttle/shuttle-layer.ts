@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { normalize180, clamp, lerpColor } from "../../../math";
 import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, type FlightConfig, type ExplosionConfig } from './physics';
+import { EngineTrail, type EngineConfig } from '../../../actors/engine';
 
 const BASE_PPD = 24;
 const SURFACE_Y = -2;
@@ -65,11 +66,6 @@ function getDebrisGlowAlpha(t: number): number {
   return ht * ht * 0.4;
 }
 
-// Shuttle trail glow — strongest at the warm engine tip, zero below the midpoint.
-function getShuttleGlowAlpha(t: number): number {
-  const hot = Math.max(0, t - 0.5) / 0.5;
-  return hot * hot * 0.3;
-}
 
 function makeCallout(config: CalloutConfig): Container {
   const c = new Container();
@@ -282,10 +278,11 @@ class Shuttle {
   readonly gfx: Container;
   private readonly trailGfx: Graphics;
   private readonly bodyGfx: Container;
-  private readonly engGlow: Graphics;
   private readonly callout: Container;
   private readonly maxSpeed: number;
   private readonly config: FlightConfig;
+  private readonly engineTrail: EngineTrail;
+  private readonly engineCfg:   EngineConfig;
   private warmColor: number;
   private coolColor: number;
   private phase: Phase = 'grounded';
@@ -299,9 +296,6 @@ class Shuttle {
   private dyingTrailMax    = 0;
   private flyingFrames     = 0;
   public pendingExplosion: ExplosionOrigin | null = null;
-  private readonly trail: Array<{ deg: number; y: number; vDeg: number }>;
-  private trailHead  = 0;
-  private trailCount = 0;
   private readonly halfLen: number;
 
   get isFlying(): boolean {
@@ -314,35 +308,38 @@ class Shuttle {
     this.halfLen   = config.bodyHalfLenMin
       + Math.random() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
     this.maxSpeed  = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
-    this.warmColor = colors.warm;
-    this.coolColor = colors.cool;
-    this.trail     = Array.from(
-      { length: config.maxTrailPoints },
-      () => ({ deg: 0, y: 0, vDeg: 0 }),
-    );
-    this.trailGfx  = new Graphics();
+    this.warmColor   = colors.warm;
+    this.coolColor   = colors.cool;
+    this.engineTrail = new EngineTrail(config.maxTrailPoints);
+    this.engineCfg   = {
+      warmColor:        colors.warm,
+      coolColor:        colors.cool,
+      maxTrailPoints:   config.maxTrailPoints,
+      trailSpeedFactor: config.trailSpeedFactor,
+      engineIntensity:  1.0,
+      trailWidth:       1.0,
+      bloomLayers:      3 + Math.floor(Math.random() * 3),
+    };
+    this.trailGfx = new Graphics();
 
-    const body   = new Graphics().rect(-this.halfLen, -0.5, this.halfLen * 2, 1).fill(0x222233);
-    this.engGlow = new Graphics().circle(-this.halfLen, 0, 2)
-      .fill({ color: colors.warm, alpha: Math.min(0.25 * config.engineIntensity, 0.9) });
-    const nose   = new Graphics().circle(this.halfLen, 0, 0.5).fill(colors.cool);
+    const body = new Graphics().rect(-this.halfLen, -0.5, this.halfLen * 2, 1).fill(0x222233);
+    const nose = new Graphics().circle(this.halfLen, 0, 0.5).fill(colors.cool);
     this.bodyGfx = new Container();
-    this.bodyGfx.addChild(body, this.engGlow, nose);
+    this.bodyGfx.addChild(body, nose);
 
     this.callout = makeCallout({ label });
     this.callout.visible = false;
 
     this.gfx = new Container();
-    this.gfx.addChild(this.trailGfx, this.bodyGfx, this.callout);
+    this.gfx.addChild(this.bodyGfx, this.trailGfx, this.callout);
     this.startWait();
   }
 
   setColors(colors: ShuttleColors) {
-    this.warmColor = colors.warm;
-    this.coolColor = colors.cool;
-    this.engGlow.clear();
-    this.engGlow.circle(-this.halfLen, 0, 2)
-      .fill({ color: colors.warm, alpha: Math.min(0.25 * this.config.engineIntensity, 0.9) });
+    this.warmColor             = colors.warm;
+    this.coolColor             = colors.cool;
+    this.engineCfg.warmColor   = colors.warm;
+    this.engineCfg.coolColor   = colors.cool;
   }
 
   private startWait() {
@@ -351,10 +348,9 @@ class Shuttle {
     this.vY               = 0;
     this.y                = SURFACE_Y;
     this.flyingFrames     = 0;
-    this.waitTicks        = this.config.waitTicksMin
+    this.waitTicks       = this.config.waitTicksMin
       + Math.floor(Math.random() * (this.config.waitTicksMax - this.config.waitTicksMin));
-    this.trailHead        = 0;
-    this.trailCount       = 0;
+    this.engineTrail.reset();
     this.bodyGfx.visible  = true;
     this.bodyGfx.rotation = 0;
   }
@@ -380,17 +376,15 @@ class Shuttle {
     this.y          +=  -this.halfLen * Math.sin(rot);
 
     // Record one final trail point at the engine position so the trail tip is flush
-    const len = this.trail.length;
-    this.trailHead = (this.trailHead - 1 + len) % len;
-    this.trail[this.trailHead].deg  = this.deg;
-    this.trail[this.trailHead].y    = this.y;
-    this.trail[this.trailHead].vDeg = this.vDeg;
-    if (this.trailCount < len) this.trailCount++;
+    this.engineTrail.record(this.deg, this.y);
 
     this.pendingExplosion = { deg: this.deg, y: this.y, vDeg: this.vDeg, vY: this.vY };
 
-    const speedPx        = Math.sqrt((this.vDeg * BASE_PPD) ** 2 + this.vY ** 2);
-    this.dyingTrailLen   = Math.min(this.trailCount, Math.floor(speedPx * this.config.trailSpeedFactor));
+    const speedPx      = Math.sqrt((this.vDeg * BASE_PPD) ** 2 + this.vY ** 2);
+    this.dyingTrailLen = Math.min(
+      this.engineTrail.pointCount,
+      Math.floor(speedPx * this.config.trailSpeedFactor),
+    );
     this.dyingTrailMax   = this.dyingTrailLen;
     this.phase           = 'dying';
     this.vDeg            = 0;
@@ -449,16 +443,6 @@ class Shuttle {
     this.y  += this.vY * tick.dt;
   }
 
-  private recordTrail(): void {
-    const len = this.trail.length;
-    this.trailHead = (this.trailHead - 1 + len) % len;
-    const slot = this.trail[this.trailHead];
-    slot.deg  = this.deg;
-    slot.y    = this.y;
-    slot.vDeg = this.vDeg;
-    if (this.trailCount < len) this.trailCount++;
-  }
-
   // Returns true when the shuttle has just triggered an explosion (caller must return early).
   private checkCruisingPhase(tick: Tick): boolean {
     this.traveledDeg += Math.abs(this.vDeg * tick.dt);
@@ -490,7 +474,7 @@ class Shuttle {
       return;
     }
 
-    this.recordTrail();
+    this.engineTrail.record(this.deg, this.y);
     this.bodyGfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
   }
 
@@ -508,38 +492,22 @@ class Shuttle {
 
   drawTrail(view: CameraView) {
     this.callout.visible = view.showCallout;
-    this.trailGfx.clear();
-    if (this.phase === 'grounded' || this.trailCount < 2) return;
+    if (this.phase === 'grounded') { this.trailGfx.clear(); return; }
 
-    const dying      = this.phase === 'dying';
-    const dyingFade  = this.computeDyingFade();
-    const visibleLen = dying
-      ? Math.max(0, Math.ceil(this.dyingTrailLen))
-      : Math.min(this.trailCount, Math.floor(
-          Math.sqrt((this.vDeg * view.ppd) ** 2 + this.vY ** 2) * this.config.trailSpeedFactor));
-    if (visibleLen < 2) return;
+    const dying     = this.phase === 'dying';
+    const dyingFade = this.computeDyingFade();
+    const speedPx   = dying
+      ? this.dyingTrailLen / this.config.trailSpeedFactor
+      : Math.sqrt((this.vDeg * view.ppd) ** 2 + this.vY ** 2);
 
-    const len = this.trail.length;
-    for (let i = 0; i < visibleLen - 1; i++) {
-      const ptA  = this.trail[(this.trailHead + i)     % len];
-      const ptB  = this.trail[(this.trailHead + i + 1) % len];
-      const t    = 1 - i / (visibleLen - 1);
-      const color = lerpColor(this.coolColor, this.warmColor, t);
-      const ax   = normalize180(ptA.deg - this.deg) * view.ppd;
-      const ay   = ptA.y - this.y;
-      const bx   = normalize180(ptB.deg - this.deg) * view.ppd;
-      const by   = ptB.y - this.y;
-
-      const glow = getShuttleGlowAlpha(t) * this.config.engineIntensity * dyingFade;
-      if (glow > 0.005) {
-        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color: this.warmColor, alpha: glow * 0.2,  width: 12 });
-        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color: this.warmColor, alpha: glow * 0.45, width: 5  });
-      }
-      this.trailGfx
-        .moveTo(ax, ay)
-        .lineTo(bx, by)
-        .stroke({ color, alpha: t * dyingFade, width: 1 });
+    if (!dying) {
+      const maxSpeedPx = this.config.maxHorizSpeed * view.ppd;
+      this.engineCfg.engineIntensity = 0.4 + clamp(speedPx / maxSpeedPx, 0, 1) * 0.3;
     }
+
+    this.engineTrail.draw(this.trailGfx, {
+      ppd: view.ppd, anchorDeg: this.deg, anchorY: this.y, speedPx, fadeFactor: dyingFade,
+    }, this.engineCfg);
   }
 }
 
