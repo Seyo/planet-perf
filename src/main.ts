@@ -16,9 +16,11 @@ import { makeShuttleLayer, ShuttleLayer } from "./planet/render/actors";
 import { DebugPanel } from "./debug/debug-panel";
 import { ExplosionTesterPanel } from "./debug/explosion-tester";
 import { ShuttleTesterPanel }   from "./debug/shuttle-tester";
+import { EngineTesterPanel }    from "./debug/engine-tester";
+import { TestBlockLayer }       from "./planet/actors/engine";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
 import { PALETTES, LIGHT_PALETTES, THEMES } from "./debug/palettes";
-import type { Palette } from "./debug/palettes";
+import type { Palette, LightPalette } from "./debug/palettes";
 import { setLightColors } from "./planet/render/buildings";
 import type { SliceLayer } from "./planet/render/slice-layer";
 
@@ -176,6 +178,10 @@ function applyPalette(p: Palette): void {
 
 const explosionTester = new ExplosionTesterPanel();
 const shuttleTester   = new ShuttleTesterPanel();
+const engineTester    = new EngineTesterPanel();
+const testBlock       = new TestBlockLayer();
+testBlock.container.visible = false;
+planet.addActorLayer(testBlock);
 
 // Frontmost shuttle layer — its ppd/yMotionScale are the correct parallax basis.
 const testerLayer = shuttleLayers[shuttleLayers.length - 1];
@@ -204,28 +210,29 @@ app.canvas.addEventListener('click', (e) => {
 debugPanel.onAnnihilate = () => { for (const sl of shuttleLayers) sl.annihilate(); };
 debugPanel.onExplosionTesterToggle = () => { explosionTester.toggle(); updateCursor(); };
 debugPanel.onShuttleTesterToggle   = () => { shuttleTester.toggle();   updateCursor(); };
+debugPanel.onEngineTesterToggle    = () => {
+  engineTester.toggle();
+  testBlock.container.visible = engineTester.isVisible;
+  if (!engineTester.isVisible) planet.setCameraLock(null);
+};
+engineTester.onBlockUpdate = (patch) => testBlock.updateConfig(patch);
+engineTester.onCameraLock  = (locked) => {
+  planet.setCameraLock(locked ? () => testBlock.positionDeg : null);
+};
 debugPanel.onPaletteChange = (idx) => applyPalette(PALETTES[idx]);
 debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
-debugPanel.onLightPaletteChange = (idx) => {
-  const lp = LIGHT_PALETTES[idx];
+function applyLightPalette(lp: LightPalette): void {
   setLightColors(lp.warmColor, lp.coolColor);
   for (const sl of shuttleLayers) sl.setLightColors({ warm: lp.warmColor, cool: lp.coolColor });
   for (const layer of bakedLayers) {
-    for (const slice of layer.ring.slices) {
-      slice.updateCacheTexture();
-    }
+    for (const slice of layer.ring.slices) slice.updateCacheTexture();
   }
-};
+}
+
+debugPanel.onLightPaletteChange = (idx) => applyLightPalette(LIGHT_PALETTES[idx]);
 debugPanel.onThemeChange = (paletteIdx, lightPaletteIdx) => {
   applyPalette(PALETTES[paletteIdx]);
-  const lp = LIGHT_PALETTES[lightPaletteIdx];
-  setLightColors(lp.warmColor, lp.coolColor);
-  for (const sl of shuttleLayers) sl.setLightColors({ warm: lp.warmColor, cool: lp.coolColor });
-  for (const layer of bakedLayers) {
-    for (const slice of layer.ring.slices) {
-      slice.updateCacheTexture();
-    }
-  }
+  applyLightPalette(LIGHT_PALETTES[lightPaletteIdx]);
 };
 
 // ?live → kiosk mode: panel hidden, gentle autopan running.

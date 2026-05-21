@@ -54,6 +54,7 @@ export class Planet {
   private interactionLayer!: SliceLayer;
 
   private autoPanDegPerTick = 0;
+  private cameraLockTarget: (() => number) | null = null;
 
   constructor(private app: Application) {
     this.pointer = new PointerX(app);
@@ -113,6 +114,11 @@ export class Planet {
   get zoomLevel():number { return this.zoom.zoom; }
 
   setAutoPan(degPerTick: number): void { this.autoPanDegPerTick = degPerTick; }
+
+  setCameraLock(getTarget: (() => number) | null): void {
+    this.cameraLockTarget = getTarget;
+    if (getTarget) this.world.vDeg = 0;
+  }
 
   finalize() {
     // Call after adding layers. Ensures zoom bounds computed.
@@ -176,8 +182,10 @@ export class Planet {
     this.prevPointerX = null;
     this.prevPointerY = null;
 
-    // Autopan overrides X-axis inertia so the slider holds a constant speed.
-    if (this.autoPanDegPerTick !== 0) {
+    if (this.cameraLockTarget) {
+      this.world.xDeg = this.cameraLockTarget();
+      this.world.vDeg = 0;
+    } else if (this.autoPanDegPerTick !== 0) {
       this.world.xDeg += this.autoPanDegPerTick * dt;
       this.world.vDeg = 0;
     } else if (INERTIA_ENABLED) {

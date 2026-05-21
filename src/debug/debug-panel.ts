@@ -47,6 +47,7 @@ export class DebugPanel {
   onAnnihilate?: () => void;
   onExplosionTesterToggle?: () => void;
   onShuttleTesterToggle?:  () => void;
+  onEngineTesterToggle?:   () => void;
 
   constructor(palettes: Palette[], lightPalettes: LightPalette[], themes: Theme[] = []) {
     this.palettes = palettes;
@@ -439,9 +440,19 @@ export class DebugPanel {
     });
     shuttleBtn.addEventListener('click', () => this.onShuttleTesterToggle?.());
 
+    const engineBtn = document.createElement('button');
+    engineBtn.textContent = 'Engine tester';
+    Object.assign(engineBtn.style, {
+      cursor: 'pointer', fontFamily: 'monospace', fontSize: '10px',
+      padding: '2px 8px', borderRadius: '3px', transition: 'none',
+      color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
+    });
+    engineBtn.addEventListener('click', () => this.onEngineTesterToggle?.());
+
     wrap.appendChild(annBtn);
     wrap.appendChild(testerBtn);
     wrap.appendChild(shuttleBtn);
+    wrap.appendChild(engineBtn);
     return wrap;
   }
 
