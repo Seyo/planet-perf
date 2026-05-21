@@ -51,6 +51,8 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
     density   = 0.68,
     salt      = 101,
     yBase     = 0,
+    minH      = 20,
+    maxH      = 280,
   } = opts;
 
   return (i) => {
@@ -82,7 +84,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
       const count = randInt(rng, 1, 3);
       for (let b = 0; b < count; b++) {
         const w = randInt(rng, 8, 40) + 0.5;
-        const h = randInt(rng, 20, 280);
+        const h = randInt(rng, minH, maxH);
         const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
         built.push(building);
         drawBuilding(buildingCanvas, rng, building, {
@@ -255,6 +257,11 @@ export function makeGroundSectionFactory(opts: FactoryOpts): SliceFactory {
 
     return root;
   };
+}
+
+// Empty district slice: soil cross-section only, no buildings.
+export function makeEmptySliceFactory(opts: FactoryOpts): SliceFactory {
+  return makeGroundSectionFactory({ sliceWidthPxAtZoom1: opts.sliceWidthPxAtZoom1 });
 }
 
 // Shallow underground: cave chamber with stalactites + stalagmites + crystals

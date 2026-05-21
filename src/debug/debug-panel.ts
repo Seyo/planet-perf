@@ -1,4 +1,5 @@
 import type { Palette, LightPalette, Theme } from './palettes';
+import { DEFAULT_TAPER, DEFAULT_DISTRICT2_TAPER, type TaperConfig, type TaperShape } from '../planet/render/district-taper';
 
 type State = {
   xDeg: number;
@@ -16,6 +17,44 @@ type Toggle = {
   target: { visible: boolean };
   dotEl: HTMLSpanElement;
 };
+
+type TaperSliderSpec = { label: string; value: number; min: number; max: number; step: number };
+
+function makeTaperSliderRow(
+  spec: TaperSliderSpec,
+  onInput: (v: number) => void,
+  onChangeEnd: () => void,
+): HTMLElement {
+  const { label, value, min, max, step } = spec;
+  const decimals = step < 1 ? 2 : 0;
+  const row = document.createElement('div');
+  Object.assign(row.style, {
+    display: 'grid', gridTemplateColumns: '90px 1fr 38px', alignItems: 'center', gap: '4px',
+  });
+  const lbl = document.createElement('span');
+  lbl.textContent = label;
+  Object.assign(lbl.style, { color: 'rgba(255,255,255,0.5)', fontSize: '10px' });
+  const valEl = document.createElement('span');
+  valEl.textContent = value.toFixed(decimals);
+  Object.assign(valEl.style, { color: '#fff', textAlign: 'right', fontSize: '10px' });
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = String(min);
+  slider.max = String(max);
+  slider.step = String(step);
+  slider.value = String(value);
+  Object.assign(slider.style, { width: '100%', margin: '0' });
+  slider.addEventListener('input', () => {
+    const v = parseFloat(slider.value);
+    valEl.textContent = v.toFixed(decimals);
+    onInput(v);
+  });
+  slider.addEventListener('change', onChangeEnd);
+  row.appendChild(lbl);
+  row.appendChild(slider);
+  row.appendChild(valEl);
+  return row;
+}
 
 function hexToCss(hex: number, alpha: number): string {
   const r = (hex >> 16) & 0xff;
@@ -49,6 +88,10 @@ export class DebugPanel {
   onExplosionTesterToggle?: () => void;
   onShuttleTesterToggle?:  () => void;
   onEngineTesterToggle?:   () => void;
+  onDistrict1TaperChange?:  (config: TaperConfig) => void;
+  onDistrict1TaperRelease?: (config: TaperConfig) => void;
+  onDistrict2TaperChange?:  (config: TaperConfig) => void;
+  onDistrict2TaperRelease?: (config: TaperConfig) => void;
 
   constructor(palettes: Palette[], lightPalettes: LightPalette[], themes: Theme[] = []) {
     this.palettes = palettes;
@@ -90,6 +133,18 @@ export class DebugPanel {
     this.el.appendChild(this.makeColumn('ACTIONS',  this.makeActionsSection()));
     this.el.appendChild(this.makeDivider());
     this.el.appendChild(this.makeColumn('THEME',    this.makeThemeSection(themes), '', true));
+    this.el.appendChild(this.makeDivider());
+    this.el.appendChild(this.makeColumn('DISTRICT 1',
+      this.makeTaperSection(DEFAULT_TAPER,
+        c => this.onDistrict1TaperChange?.(c),
+        c => this.onDistrict1TaperRelease?.(c),
+      ), '220px'));
+    this.el.appendChild(this.makeDivider());
+    this.el.appendChild(this.makeColumn('DISTRICT 2',
+      this.makeTaperSection(DEFAULT_DISTRICT2_TAPER,
+        c => this.onDistrict2TaperChange?.(c),
+        c => this.onDistrict2TaperRelease?.(c),
+      ), '220px'));
 
     document.body.appendChild(this.el);
   }
@@ -480,6 +535,53 @@ export class DebugPanel {
     wrap.appendChild(shuttleBtn);
     wrap.appendChild(engineBtn);
     wrap.appendChild(copyUrlBtn);
+    return wrap;
+  }
+
+  private makeTaperSection(
+    defaults: TaperConfig,
+    onChange: (c: TaperConfig) => void,
+    onRelease: (c: TaperConfig) => void,
+  ): HTMLElement {
+    const state: TaperConfig = { ...defaults };
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, { display: 'flex', flexDirection: 'column', gap: '3px' });
+
+    const emit    = () => onChange({ ...state });
+    const emitEnd = () => onRelease({ ...state });
+    const addSlider = (label: string, key: keyof Omit<TaperConfig, 'shape'>, min: number, max: number, step: number) =>
+      wrap.appendChild(makeTaperSliderRow(
+        { label, value: state[key] as number, min, max, step },
+        v => { state[key] = v; emit(); },
+        emitEnd,
+      ));
+
+    addSlider('centre density', 'centerDensity', 0,  1,   0.01);
+    addSlider('edge density',   'edgeDensity',   0,  1,   0.01);
+    addSlider('centre max H',   'centerMaxH',    20, 500, 5);
+    addSlider('edge max H',     'edgeMaxH',      20, 500, 5);
+
+    const shapeItems: { key: TaperShape; label: string }[] = [
+      { key: 'linear', label: 'Linear' },
+      { key: 'smooth', label: 'Smooth' },
+      { key: 'quad',   label: 'Quad' },
+    ];
+    const refreshShapes = (buttons: Map<TaperShape, HTMLButtonElement>) => {
+      for (const [s, btn] of buttons) {
+        const active = s === state.shape;
+        Object.assign(btn.style, {
+          background: active ? 'rgba(255,255,255,0.2)'           : 'rgba(255,255,255,0.05)',
+          border:     active ? '1px solid rgba(255,255,255,0.6)' : '1px solid rgba(255,255,255,0.15)',
+        });
+      }
+    };
+    const { row: shapeRow, buttons } = this.makeButtonGroup(
+      shapeItems,
+      (shape) => { state.shape = shape; refreshShapes(buttons); emit(); emitEnd(); },
+      3,
+    );
+    refreshShapes(buttons);
+    wrap.appendChild(shapeRow);
     return wrap;
   }
 

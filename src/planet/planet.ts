@@ -12,7 +12,10 @@ export interface ActorLike {
 import { SliceLayer } from "./render/slice-layer";
 import { SliceRing } from "./render/slice-ring";
 import type { SliceFactory } from "./render/slice-ring";
-import { makeBackCityFactory, makeDeepCoreFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
+import { makeBackCityFactory, makeDeepCoreFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
+import { sliceTaperParams, proportionalTaperParams, type TaperConfig, type District } from "./render/district-taper";
+export type { TaperConfig, TaperShape, District } from "./render/district-taper";
+export { DEFAULT_TAPER, DEFAULT_DISTRICT2_TAPER } from "./render/district-taper";
 import type { Animator } from "./render/layer-factories";
 
 export type WorldState = {
@@ -289,19 +292,37 @@ export class Planet {
 }
 
 // Convenience builders
-export function makeFrontLayer(animators?: Animator[]) {
- const frontRing = new SliceRing(
-   72,
-   5,
-   120,
-   makeFrontBuildingFactory({
-     sliceWidthPxAtZoom1: 120,
-     density: 0.68,
-     baseColor: 0x060810,
-   }, animators),
- );
- const frontLayer = new SliceLayer(frontRing, 1.0, 1.0, 1.0);
- return frontLayer;
+export function makeFrontLayer(animators?: Animator[], citySliceCount = 9) {
+  const baseColor           = 0x060810;
+  const sliceWidthPxAtZoom1 = 120;
+  const cityFactory  = makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density: 0.68, baseColor }, animators);
+  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1, baseColor });
+  const factory: SliceFactory = (i, deg) => i < citySliceCount ? cityFactory(i, deg) : emptyFactory(i, deg);
+  const frontRing = new SliceRing(72, 5, sliceWidthPxAtZoom1, factory);
+  return new SliceLayer(frontRing, 1.0, 1.0, 1.0);
+}
+
+export function makeTaperedFrontLayer(districts: District[], animators?: Animator[]) {
+  const baseColor           = 0x060810;
+  const sliceWidthPxAtZoom1 = 120;
+  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1, baseColor });
+
+  const sliceFactoryMap = new Map<number, SliceFactory>();
+  for (const d of districts) {
+    for (let j = 0; j < d.sliceCount; j++) {
+      const { density, maxH } = sliceTaperParams(j, d.sliceCount, d.taperConfig);
+      sliceFactoryMap.set(
+        d.startSlice + j,
+        makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density, maxH, baseColor }, animators),
+      );
+    }
+  }
+
+  const factory: SliceFactory = (i, deg) => {
+    const f = sliceFactoryMap.get(i);
+    return f ? f(i, deg) : emptyFactory(i, deg);
+  };
+  return new SliceLayer(new SliceRing(72, 5, sliceWidthPxAtZoom1, factory), 1.0, 1.0, 1.0);
 }
 
 export type BackCityConfig = {
@@ -317,11 +338,7 @@ export type BackCityConfig = {
   bakeResolution?: number;
 };
 
-// Group this many 5° slices into one baked super-slice.
-// 72 / 9 = 8 super-slices of 45° each — clean division, no remainder.
-const BACK_SUPER_SIZE = 9;
-
-export function makeBackCityLayer(config: BackCityConfig = {}) {
+export function makeBackCityLayer(config: BackCityConfig = {}, districts?: District[]) {
   const {
     motionScale    = 0.97,
     yMotionScale   = 0.97,
@@ -335,65 +352,67 @@ export function makeBackCityLayer(config: BackCityConfig = {}) {
     bakeResolution = 1,
   } = config;
 
-  const singleWidth  = 120;
-  const singleDeg    = 5;
-  const superCount   = 72 / BACK_SUPER_SIZE;           // 8
-  const superDeg     = singleDeg  * BACK_SUPER_SIZE;   // 45°
-  const superWidth   = singleWidth * BACK_SUPER_SIZE;  // 1080px
+  const sliceWidth   = 120;
+  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
 
-  const singleFactory = makeBackCityFactory({
-    sliceWidthPxAtZoom1: singleWidth, baseColor, density, minH, maxH, salt, underground, undergroundDim,
-  });
-
-  const superFactory: SliceFactory = (superIndex) => {
-    const root = new Container();
-    for (let j = 0; j < BACK_SUPER_SIZE; j++) {
-      const content = singleFactory(superIndex * BACK_SUPER_SIZE + j, 0);
-      content.x = j * singleWidth;
-      root.addChild(content);
+  const sliceFactoryMap = new Map<number, SliceFactory>();
+  for (const d of (districts ?? [])) {
+    for (let j = 0; j < d.sliceCount; j++) {
+      const { density: dv, maxH: mH } = proportionalTaperParams(
+        { density, maxH }, j, d.sliceCount, d.taperConfig,
+      );
+      sliceFactoryMap.set(
+        d.startSlice + j,
+        makeBackCityFactory({ sliceWidthPxAtZoom1: sliceWidth, baseColor, density: dv, minH, maxH: mH, salt, underground, undergroundDim }),
+      );
     }
-    return root;
+  }
+
+  const factory: SliceFactory = (i) => {
+    const f = sliceFactoryMap.get(i);
+    return f ? f(i, 0) : emptyFactory(i, 0);
   };
 
-  const ring = new SliceRing(superCount, superDeg, superWidth, superFactory, bakeResolution);
+  const ring = new SliceRing(72, 5, sliceWidth, factory, bakeResolution);
   return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
 }
 
-export function makeGroupedBackCityLayer(configs: BackCityConfig[]): SliceLayer {
+export function makeGroupedBackCityLayer(configs: BackCityConfig[], districts?: District[]): SliceLayer {
   const n = configs.length;
   const motionScale  = configs.reduce((s, c) => s + (c.motionScale  ?? 0.97), 0) / n;
   const yMotionScale = configs.reduce((s, c) => s + (c.yMotionScale ?? motionScale), 0) / n;
   const bakeResolution = Math.max(...configs.map(c => c.bakeResolution ?? 1));
 
-  const singleWidth = 120;
-  const superCount  = 72 / BACK_SUPER_SIZE;
-  const superDeg    = 5   * BACK_SUPER_SIZE;
-  const superWidth  = singleWidth * BACK_SUPER_SIZE;
+  const sliceWidth   = 120;
+  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
 
-  const factories = configs.map(c => makeBackCityFactory({
-    sliceWidthPxAtZoom1: singleWidth,
-    baseColor:      c.baseColor      ?? 0x060810,
-    density:        c.density        ?? 0.85,
-    minH:           c.minH           ?? 40,
-    maxH:           c.maxH           ?? 280,
-    salt:           c.salt           ?? 202,
-    underground:    c.underground    ?? false,
-    undergroundDim: c.undergroundDim ?? 0,
-  }));
-
-  const superFactory: SliceFactory = (superIndex) => {
-    const root = new Container();
-    for (let j = 0; j < BACK_SUPER_SIZE; j++) {
-      const sliceIdx = superIndex * BACK_SUPER_SIZE + j;
-      const subSlice = new Container();
-      for (const factory of factories) subSlice.addChild(factory(sliceIdx, 0));
-      subSlice.x = j * singleWidth;
-      root.addChild(subSlice);
+  const sliceFactoryMap = new Map<number, SliceFactory[]>();
+  for (const d of (districts ?? [])) {
+    for (let j = 0; j < d.sliceCount; j++) {
+      sliceFactoryMap.set(d.startSlice + j, configs.map(c => {
+        const { density: dv, maxH: mH } = proportionalTaperParams(
+          { density: c.density ?? 0.85, maxH: c.maxH ?? 280 }, j, d.sliceCount, d.taperConfig,
+        );
+        return makeBackCityFactory({
+          sliceWidthPxAtZoom1: sliceWidth,
+          baseColor: c.baseColor ?? 0x060810,
+          density: dv, minH: c.minH ?? 40, maxH: mH,
+          salt: c.salt ?? 202,
+          underground: c.underground ?? false,
+          undergroundDim: c.undergroundDim ?? 0,
+        });
+      }));
     }
+  }
+
+  const getSliceFacts = (i: number): SliceFactory[] => sliceFactoryMap.get(i) ?? [emptyFactory];
+  const factory: SliceFactory = (i) => {
+    const root = new Container();
+    for (const f of getSliceFacts(i)) root.addChild(f(i, 0));
     return root;
   };
 
-  const ring = new SliceRing(superCount, superDeg, superWidth, superFactory, bakeResolution);
+  const ring = new SliceRing(72, 5, sliceWidth, factory, bakeResolution);
   return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
 }
 
