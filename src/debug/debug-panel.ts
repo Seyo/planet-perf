@@ -39,6 +39,7 @@ export class DebugPanel {
   private themeButtons = new Map<number, HTMLButtonElement>();
   private togglesWrap!: HTMLElement;
   private toggles: Map<string, Toggle> = new Map();
+  private autopanSpeed = 0;
 
   onPaletteChange?: (idx: number) => void;
   onAutopanChange?: (degPerTick: number) => void;
@@ -263,6 +264,7 @@ export class DebugPanel {
     slider.addEventListener('input', () => {
       const v = parseFloat(slider.value);
       valEl.textContent = v.toFixed(2);
+      this.autopanSpeed = v;
       this.onAutopanChange?.(v);
     });
 
@@ -274,9 +276,10 @@ export class DebugPanel {
   private makeButtonGroup<T>(
     items: { key: T; label: string }[],
     onSelect: (key: T) => void,
+    columns = 4,
   ): { row: HTMLElement; buttons: Map<T, HTMLButtonElement> } {
     const row = document.createElement('div');
-    Object.assign(row.style, { display: 'flex', flexWrap: 'wrap', gap: '4px' });
+    Object.assign(row.style, { display: 'grid', gridTemplateColumns: `repeat(${columns}, max-content)`, gap: '4px' });
     const buttons = new Map<T, HTMLButtonElement>();
     for (const item of items) {
       const btn = document.createElement('button');
@@ -409,6 +412,15 @@ export class DebugPanel {
     });
   }
 
+  private buildLiveUrl(): string {
+    const base = window.location.origin + window.location.pathname;
+    const p = new URLSearchParams();
+    p.set('palette', this.palettes[this.activeIdx].name);
+    p.set('lights', this.lightPalettes[this.activeLightIdx].name);
+    if (this.autopanSpeed !== 0) p.set('autopan', this.autopanSpeed.toString());
+    return `${base}?${p.toString()}`;
+  }
+
   private makeActionsSection(): HTMLElement {
     const wrap = document.createElement('div');
     Object.assign(wrap.style, { display: 'flex', flexDirection: 'column', gap: '4px' });
@@ -449,10 +461,25 @@ export class DebugPanel {
     });
     engineBtn.addEventListener('click', () => this.onEngineTesterToggle?.());
 
+    const copyUrlBtn = document.createElement('button');
+    copyUrlBtn.textContent = 'copy live url';
+    Object.assign(copyUrlBtn.style, {
+      cursor: 'pointer', fontFamily: 'monospace', fontSize: '10px',
+      padding: '2px 8px', borderRadius: '3px', transition: 'none',
+      color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
+    });
+    copyUrlBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(this.buildLiveUrl()).then(() => {
+        copyUrlBtn.textContent = 'copied!';
+        setTimeout(() => { copyUrlBtn.textContent = 'copy live url'; }, 1500);
+      });
+    });
+
     wrap.appendChild(annBtn);
     wrap.appendChild(testerBtn);
     wrap.appendChild(shuttleBtn);
     wrap.appendChild(engineBtn);
+    wrap.appendChild(copyUrlBtn);
     return wrap;
   }
 

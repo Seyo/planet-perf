@@ -235,11 +235,48 @@ debugPanel.onThemeChange = (paletteIdx, lightPaletteIdx) => {
   applyLightPalette(LIGHT_PALETTES[lightPaletteIdx]);
 };
 
-// ?live → kiosk mode: panel hidden, gentle autopan running.
-if (new URLSearchParams(window.location.search).has('live')) {
-  debugPanel.hide();
-  planet.setAutoPan(0.02);
+const params = new URLSearchParams(window.location.search);
+
+let initPaletteIdx = DEFAULT_PALETTE_IDX;
+let initLightPaletteIdx = 0;
+
+const themeParam = params.get('theme');
+if (themeParam !== null) {
+  const theme = THEMES.find(t => t.name.toLowerCase() === themeParam.toLowerCase());
+  if (theme) {
+    initPaletteIdx = theme.paletteIdx;
+    initLightPaletteIdx = theme.lightPaletteIdx;
+  }
 }
+
+const paletteParam = params.get('palette');
+if (paletteParam !== null) {
+  const idx = PALETTES.findIndex(p => p.name.toLowerCase() === paletteParam.toLowerCase());
+  if (idx !== -1) initPaletteIdx = idx;
+}
+
+const lightsParam = params.get('lights');
+if (lightsParam !== null) {
+  const idx = LIGHT_PALETTES.findIndex(lp => lp.name.toLowerCase() === lightsParam.toLowerCase());
+  if (idx !== -1) initLightPaletteIdx = idx;
+}
+
+if (initPaletteIdx !== DEFAULT_PALETTE_IDX) {
+  applyPalette(PALETTES[initPaletteIdx]);
+  debugPanel.setActivePalette(initPaletteIdx);
+}
+if (initLightPaletteIdx !== 0) {
+  applyLightPalette(LIGHT_PALETTES[initLightPaletteIdx]);
+  debugPanel.setActiveLightPalette(initLightPaletteIdx);
+}
+
+const autopanParam = params.get('autopan');
+if (autopanParam !== null) {
+  const speed = parseFloat(autopanParam);
+  if (!isNaN(speed)) planet.setAutoPan(speed);
+}
+
+if (!params.has('debug')) debugPanel.hide();
 
 app.ticker.add((ticker) => {
   planet.update(ticker.deltaTime);
