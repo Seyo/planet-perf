@@ -27,15 +27,28 @@ import type { SliceLayer } from "./planet/render/slice-layer";
 const DEFAULT_PALETTE_IDX = PALETTES.findIndex(p => p.name === 'Sunrise');
 
 const app = new Application();
-await app.init({
-  preference: 'webgl',
-  resizeTo: window,
-  antialias: true,
-  resolution: window.devicePixelRatio,
-  autoDensity: true,
-  backgroundAlpha: 1,
-  backgroundColor: PALETTES[DEFAULT_PALETTE_IDX].backgroundColor,
-});
+try {
+  await app.init({
+    preference: 'webgl',
+    resizeTo: window,
+    antialias: true,
+    resolution: window.devicePixelRatio,
+    autoDensity: true,
+    backgroundAlpha: 1,
+    backgroundColor: PALETTES[DEFAULT_PALETTE_IDX].backgroundColor,
+  });
+} catch {
+  const msg = document.createElement('div');
+  Object.assign(msg.style, {
+    position: 'fixed', inset: '0', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', background: '#0a0a0a', color: '#ccc',
+    fontFamily: 'monospace', fontSize: '14px', textAlign: 'center',
+    lineHeight: '2', padding: '40px',
+  });
+  msg.innerHTML = 'WebGL is not available.<br>If you\'re using Brave, try disabling Shields for this page.<br>Otherwise, Chrome or Firefox should work.';
+  document.body.appendChild(msg);
+  throw new Error('WebGL unavailable');
+}
 
 document.body.appendChild(app.canvas);
 
