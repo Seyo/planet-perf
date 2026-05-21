@@ -14,6 +14,7 @@ import {
 import { makeActorLayer } from "./planet/render/actor-layer";
 import { makeShuttleLayer, ShuttleLayer } from "./planet/render/actors";
 import { DebugPanel } from "./debug/debug-panel";
+import { UserPanel } from "./ui";
 import { ExplosionTesterPanel } from "./debug/explosion-tester";
 import { ShuttleTesterPanel }   from "./debug/shuttle-tester";
 import { EngineTesterPanel }    from "./debug/engine-tester";
@@ -155,6 +156,8 @@ app.stage.addChild(yGridOverlay.container);
 const debugPanel = new DebugPanel(PALETTES, LIGHT_PALETTES, THEMES);
 debugPanel.setActivePalette(DEFAULT_PALETTE_IDX);
 
+const userPanel = new UserPanel(PALETTES, LIGHT_PALETTES, THEMES, { initialPaletteIdx: DEFAULT_PALETTE_IDX });
+
 // Standalone debug line — lives inside the sky layer so it follows its y-parallax.
 // Re-parented in applyPalette whenever the sky layer is replaced.
 const skyBottomLine = new Graphics().rect(-5000, 4, 10000, 2).fill(0xff0000);
@@ -232,7 +235,7 @@ engineTester.onBlockUpdate = (patch) => testBlock.updateConfig(patch);
 engineTester.onCameraLock  = (locked) => {
   planet.setCameraLock(locked ? () => testBlock.positionDeg : null);
 };
-debugPanel.onPaletteChange = (idx) => applyPalette(PALETTES[idx]);
+debugPanel.onPaletteChange = (idx) => { applyPalette(PALETTES[idx]); userPanel.setPalette(idx); };
 debugPanel.onAutopanChange = (speed) => planet.setAutoPan(speed);
 function applyLightPalette(lp: LightPalette): void {
   setLightColors(lp.warmColor, lp.coolColor);
@@ -242,11 +245,18 @@ function applyLightPalette(lp: LightPalette): void {
   }
 }
 
-debugPanel.onLightPaletteChange = (idx) => applyLightPalette(LIGHT_PALETTES[idx]);
+debugPanel.onLightPaletteChange = (idx) => { applyLightPalette(LIGHT_PALETTES[idx]); userPanel.setLights(idx); };
 debugPanel.onThemeChange = (paletteIdx, lightPaletteIdx) => {
   applyPalette(PALETTES[paletteIdx]);
   applyLightPalette(LIGHT_PALETTES[lightPaletteIdx]);
+  userPanel.setPalette(paletteIdx);
+  userPanel.setLights(lightPaletteIdx);
 };
+
+userPanel.onPaletteChange  = (idx) => { applyPalette(PALETTES[idx]); debugPanel.setActivePalette(idx); };
+userPanel.onLightsChange   = (idx) => { applyLightPalette(LIGHT_PALETTES[idx]); debugPanel.setActiveLightPalette(idx); };
+userPanel.onAnnihilate     = () => { for (const sl of shuttleLayers) sl.annihilate(); };
+userPanel.onAutopanChange  = (speed) => planet.setAutoPan(speed);
 
 const params = new URLSearchParams(window.location.search);
 
@@ -277,16 +287,18 @@ if (lightsParam !== null) {
 if (initPaletteIdx !== DEFAULT_PALETTE_IDX) {
   applyPalette(PALETTES[initPaletteIdx]);
   debugPanel.setActivePalette(initPaletteIdx);
+  userPanel.setPalette(initPaletteIdx);
 }
 if (initLightPaletteIdx !== 0) {
   applyLightPalette(LIGHT_PALETTES[initLightPaletteIdx]);
   debugPanel.setActiveLightPalette(initLightPaletteIdx);
+  userPanel.setLights(initLightPaletteIdx);
 }
 
 const autopanParam = params.get('autopan');
 if (autopanParam !== null) {
   const speed = parseFloat(autopanParam);
-  if (!isNaN(speed)) planet.setAutoPan(speed);
+  if (!isNaN(speed)) { planet.setAutoPan(speed); userPanel.setAutopan(speed); }
 }
 
 if (!params.has('debug')) debugPanel.hide();
