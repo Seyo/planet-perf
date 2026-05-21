@@ -5,7 +5,7 @@ import {
   commitCanvas,
   FRONT_THEME,
   type Archetype,
-} from "./planet/render/building-v2";
+} from "./planet/render/buildings";
 import { mulberry32, hashSeed, randInt } from "./planet/render/rng";
 
 // ---- static playground config ----
