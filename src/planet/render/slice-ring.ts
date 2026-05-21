@@ -4,6 +4,14 @@ import { normalize180 } from "../math";
 export type Slice = Container & { homeDeg: number };
 export type SliceFactory = (i: number, homeDeg: number) => Container;
 
+export type SliceLayoutParams = {
+  cameraDeg:   number;
+  zoom:        number;
+  viewWidthPx: number;
+  motionScale: number;
+  cullPadPx?:  number;
+};
+
 export class SliceRing {
   readonly container = new Container();
   readonly slices: Slice[] = [];
@@ -47,18 +55,8 @@ export class SliceRing {
     }
   }
 
-  /**
-   * Layout using ONE shared camera angle.
-   * motionScale is the parallax: <1 moves slower, >1 moves faster.
-   * Notice: we do NOT change the camera/world angle per layer.
-   */
-  layout(
-    cameraDeg: number,
-    zoom: number,
-    viewWidthPx: number,
-    motionScale: number,
-    cullPadPx = 150,
-  ) {
+  layout(params: SliceLayoutParams) {
+    const { cameraDeg, zoom, viewWidthPx, motionScale, cullPadPx = 150 } = params;
     const halfW = viewWidthPx / 2;
     const ppd = this.basePPD * motionScale; // unzoomed coords; zoom is handled by outer container scale
 

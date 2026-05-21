@@ -31,7 +31,7 @@ type ShuttleColors = { warm: number; cool: number };
 type ExplosionOrigin = { deg: number; y: number; vDeg: number; vY: number };
 
 // Minimal world-space position (deg + y).
-type DegY = { deg: number; y: number };
+export type DegY = { deg: number; y: number };
 
 // One simulation step, carrying the delta-time through the internal update chain.
 type Tick = { dt: number };
@@ -513,23 +513,26 @@ class Shuttle {
 
 // ─── ShuttleLayer ─────────────────────────────────────────────────────────────
 
+export type ShuttleLayerSpec = { motionScale: number; yMotionScale: number; label: string };
+type ShuttleLayerInit = ShuttleLayerSpec & { count: number };
+
 export class ShuttleLayer {
   readonly container = new Container();
   private readonly shuttles: Shuttle[];
   private readonly ppd: number;
+  private readonly motionScale:  number;
+  private readonly yMotionScale: number;
+  private readonly debugToggle:  { visible: boolean };
   private colors: ShuttleColors = { warm: 0xffee66, cool: 0x88ccff };
   private readonly explosions: Explosion[] = [];
   private readonly allDebris:  Debris[]    = [];
 
-  constructor(
-    private readonly motionScale: number,
-    private readonly yMotionScale: number,
-    count: number,
-    label: string,
-    private readonly debugToggle: { visible: boolean },
-  ) {
-    this.ppd      = BASE_PPD * motionScale;
-    this.shuttles = Array.from({ length: count }, () => new Shuttle(this.colors, label));
+  constructor(init: ShuttleLayerInit, debugToggle: { visible: boolean }) {
+    this.motionScale  = init.motionScale;
+    this.yMotionScale = init.yMotionScale;
+    this.debugToggle  = debugToggle;
+    this.ppd          = BASE_PPD * init.motionScale;
+    this.shuttles     = Array.from({ length: init.count }, () => new Shuttle(this.colors, init.label));
     for (const s of this.shuttles) this.container.addChild(s.gfx);
   }
 
@@ -595,8 +598,8 @@ export class ShuttleLayer {
     }
   }
 
-  spawnExplosionAt(deg: number, y: number, cfg: ExplosionConfig): void {
-    this.spawnAirExplosion({ deg, y, vDeg: 0, vY: 0 }, cfg);
+  spawnExplosionAt(pos: DegY, cfg: ExplosionConfig): void {
+    this.spawnAirExplosion({ ...pos, vDeg: 0, vY: 0 }, cfg);
   }
 
   spawnShuttleAt(deg: number, cfg: FlightConfig): void {
@@ -695,11 +698,9 @@ export class ShuttleLayer {
 }
 
 export function makeShuttleLayer(
-  motionScale: number,
-  yMotionScale: number,
-  label: string,
+  spec: ShuttleLayerSpec,
   debugToggle: { visible: boolean },
 ): ShuttleLayer {
   const count = 2 + Math.floor(Math.random() * 3);
-  return new ShuttleLayer(motionScale, yMotionScale, count, label, debugToggle);
+  return new ShuttleLayer({ ...spec, count }, debugToggle);
 }

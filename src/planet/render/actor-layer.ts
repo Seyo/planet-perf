@@ -57,9 +57,8 @@ class Car {
   private pickNewDest() {
     // Only allow horizontal reversal when off-screen
     let spread = (Math.random() * 2 - 1) * DEST_DEG_SPREAD;
-    if (this.onScreen && spread !== 0 && Math.sign(spread) !== this.dirSign) {
-      spread = -spread;
-    }
+    const wouldReverse = this.onScreen && spread !== 0 && Math.sign(spread) !== this.dirSign;
+    if (wouldReverse) spread = -spread;
     this.destDeg = ((this.deg + spread) % 360 + 360) % 360;
 
     // Vertical drift clamped to zone — never enter dirt

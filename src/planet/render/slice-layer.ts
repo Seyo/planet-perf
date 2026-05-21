@@ -21,7 +21,7 @@ export class SliceLayer {
   }
 
   layout(cameraDeg: number, zoom: number, viewWidthPx: number, cameraY: number) {
-    this.ring.layout(cameraDeg, zoom, viewWidthPx, this.motionScale);
+    this.ring.layout({ cameraDeg, zoom, viewWidthPx, motionScale: this.motionScale });
     this.container.y = -cameraY * this.yMotionScale;
   }
 }

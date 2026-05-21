@@ -104,7 +104,7 @@ for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
     planet.addActorLayer(makeActorLayer(motionScale, motionScale));
   }
   if (i >= ACTOR_LAYER_START && i < BACK_LAYER_COUNT - 5) {
-    const sl = makeShuttleLayer(motionScale, motionScale, String(i), shuttleDebugToggle);
+    const sl = makeShuttleLayer({ motionScale, yMotionScale: motionScale, label: String(i) }, shuttleDebugToggle);
     shuttleLayers.push(sl);
     planet.addActorLayer(sl);
   }
@@ -185,7 +185,7 @@ planet.addActorLayer(testBlock);
 
 // Frontmost shuttle layer — its ppd/yMotionScale are the correct parallax basis.
 const testerLayer = shuttleLayers[shuttleLayers.length - 1];
-explosionTester.onSpawn = (deg, y, cfg) => testerLayer.spawnExplosionAt(deg, y, cfg);
+explosionTester.onSpawn = (deg, y, cfg) => testerLayer.spawnExplosionAt({ deg, y }, cfg);
 shuttleTester.onSpawn   = (deg, cfg) => testerLayer.spawnShuttleAt(deg, cfg);
 shuttleTester.onClear   = ()         => { for (const sl of shuttleLayers) sl.clearShuttles(); };
 
