@@ -57,6 +57,14 @@ export function sliceTaperParams(
   };
 }
 
+const HEIGHT_NORM_REF = 600;
+
+export function districtMass(config: TaperConfig): number {
+  const avgDensity = (config.centerDensity + config.edgeDensity) / 2;
+  const avgMaxH    = (config.centerMaxH    + config.edgeMaxH)    / 2;
+  return avgDensity * (avgMaxH / HEIGHT_NORM_REF);
+}
+
 export function proportionalTaperParams(
   base: { density: number; maxH: number },
   sliceIdx: number,

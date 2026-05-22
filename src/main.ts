@@ -8,13 +8,12 @@ import {
   makeShallowCaveLayer,
   makeSkyLayer,
   HAZE_TOP_Y,
-  DEFAULT_TAPER,
-  DEFAULT_DISTRICT2_TAPER,
-  type TaperConfig,
+  districtMass,
   type District,
 } from "./planet/planet";
-import { makeActorLayer } from "./planet/render/actor-layer";
+import { makeActorLayer, ActorLayer, type ActorLayerConfig, type DistrictRange } from "./planet/render/actor-layer";
 import { makeShuttleLayer, ShuttleLayer } from "./planet/render/actors";
+import { LayoutPanel } from "./debug/layout-panel";
 import { DebugPanel } from "./debug/debug-panel";
 import { UserPanel } from "./ui";
 import { ExplosionTesterPanel } from "./debug/explosion-tester";
@@ -71,28 +70,32 @@ const BACK_SCALE_START  = 0.70;
 const BACK_SCALE_END    = (BACK_LAYER_COUNT - 1 + BACK_SCALE_START) / BACK_LAYER_COUNT;
 const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 
-let district1State: TaperConfig = { ...DEFAULT_TAPER };
-let district2State: TaperConfig = { ...DEFAULT_DISTRICT2_TAPER };
-
 const DEGS_PER_SLICE = 5;
 
-function getDistricts(): District[] {
-  return [
-    { startSlice:  0, sliceCount: 9, taperConfig: district1State },
-    { startSlice: 36, sliceCount: 9, taperConfig: district2State },
-  ];
+const layoutPanel = new LayoutPanel();
+let activeDistricts: District[] = layoutPanel.getDistricts();
+
+function getDistricts(): District[] { return activeDistricts; }
+
+function computeActorDistricts(districts: District[]) {
+  return districts.map(d => ({
+    startDeg: d.startSlice * DEGS_PER_SLICE,
+    endDeg:   (d.startSlice + d.sliceCount) * DEGS_PER_SLICE,
+    mass:     districtMass(d.taperConfig),
+  }));
 }
 
-const ACTOR_DISTRICTS = getDistricts().map(d => ({
-  startDeg: d.startSlice * DEGS_PER_SLICE,
-  endDeg:   (d.startSlice + d.sliceCount) * DEGS_PER_SLICE,
-}));
+const ACTOR_DISTRICTS = computeActorDistricts(getDistricts());
 
-type HazeEntry  = { container: Container; alpha: number; bottomAlpha: number };
-type BackEntry  = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer };
-const hazeEntries: HazeEntry[] = [];
-const bakedLayers: SliceLayer[] = [];
-const backEntries: BackEntry[]  = [];
+type HazeEntry    = { container: Container; alpha: number; bottomAlpha: number };
+type BackEntry    = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer };
+type ActorEntry   = { layer: ActorLayer; config: ActorLayerConfig };
+type ShuttleEntry = { layer: ShuttleLayer; motionScale: number; yMotionScale: number; label: string };
+const hazeEntries: HazeEntry[]     = [];
+const bakedLayers: SliceLayer[]    = [];
+const backEntries: BackEntry[]     = [];
+const actorEntries: ActorEntry[]   = [];
+const shuttleEntries: ShuttleEntry[] = [];
 const shuttleLayers: ShuttleLayer[] = [];
 const shuttleDebugToggle = { visible: false };
 
@@ -118,7 +121,10 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   bakedLayers.push(backLayer);
   planet.addLayer(backLayer, { behindAll: true });
   if (hasActors) {
-    planet.addActorLayer(makeActorLayer({ motionScale, yMotionScale: motionScale, registry, layerKey }, ACTOR_DISTRICTS));
+    const actorCfg: ActorLayerConfig = { motionScale, yMotionScale: motionScale, registry, layerKey };
+    const actorLayer = makeActorLayer(actorCfg, ACTOR_DISTRICTS);
+    actorEntries.push({ layer: actorLayer, config: actorCfg });
+    planet.addActorLayer(actorLayer);
     const layerT = (i - ACTOR_LAYER_START) / (BACK_LAYER_COUNT - 1 - ACTOR_LAYER_START);
     boundsLayerInfos.push({
       layerKey: layerKey!,
@@ -129,6 +135,7 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   }
   if (hasActors && i < BACK_LAYER_COUNT - 5) {
     const sl = makeShuttleLayer({ motionScale, yMotionScale: motionScale, label: String(i), districts: ACTOR_DISTRICTS }, shuttleDebugToggle);
+    shuttleEntries.push({ layer: sl, motionScale, yMotionScale: motionScale, label: String(i) });
     shuttleLayers.push(sl);
     planet.addActorLayer(sl);
   }
@@ -144,7 +151,10 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
 planet.addLayer(makeGroundLayer(), { behindAll: true });
 let activeFrontLayer = makeTaperedFrontLayer(getDistricts(), planet.animators, registry);
 planet.addLayer(activeFrontLayer, { asInteractionLayer: true });
-planet.addActorLayer(makeActorLayer({ motionScale: 1.0, yMotionScale: 1.0, registry, layerKey: 'front' }, ACTOR_DISTRICTS));
+const frontActorCfg: ActorLayerConfig = { motionScale: 1.0, yMotionScale: 1.0, registry, layerKey: 'front' };
+const frontActorLayer = makeActorLayer(frontActorCfg, ACTOR_DISTRICTS);
+actorEntries.push({ layer: frontActorLayer, config: frontActorCfg });
+planet.addActorLayer(frontActorLayer);
 boundsLayerInfos.push({ layerKey: 'front', motionScale: 1.0, yMotionScale: 1.0, color: 0x44ccff });
 
 const frontHazeContainer = makeHazeOverlay({ alpha: 0.25, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
@@ -153,6 +163,10 @@ planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();
 
+if (getDistricts().length <= 1) {
+  for (const e of shuttleEntries) { e.layer.clearShuttles(); e.layer.container.visible = false; }
+}
+
 function lerpColor(a: number, b: number, t: number): number {
   const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
   const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
@@ -160,25 +174,6 @@ function lerpColor(a: number, b: number, t: number): number {
   const g = Math.round(ag + (bg - ag) * t);
   const bv = Math.round(ab + (bb - ab) * t);
   return (r << 16) | (g << 8) | bv;
-}
-
-function rebuildFrontLayer() {
-  planet.animators.length = 0;
-  const next = makeTaperedFrontLayer(getDistricts(), planet.animators, registry);
-  planet.replaceLayer(activeFrontLayer, next);
-  activeFrontLayer = next;
-}
-
-function rebuildBackLayers() {
-  const districts = getDistricts();
-  for (const entry of backEntries) {
-    const old = entry.layer;
-    const next = entry.rebuild(districts);
-    planet.replaceLayer(old, next);
-    entry.layer = next;
-    const idx = bakedLayers.indexOf(old);
-    if (idx !== -1) bakedLayers[idx] = next;
-  }
 }
 
 function setLayerRange(back: number, front: number): void {
@@ -190,6 +185,43 @@ function setLayerRange(back: number, front: number): void {
   const frontVis = front >= BACK_LAYER_COUNT;
   activeFrontLayer.container.visible                    = frontVis;
   hazeEntries[hazeEntries.length - 1].container.visible = frontVis;
+}
+
+function rebuildBackEntry(entry: BackEntry, districts: District[]): void {
+  const old = entry.layer;
+  const next = entry.rebuild(districts);
+  planet.replaceLayer(old, next);
+  entry.layer = next;
+  const idx = bakedLayers.indexOf(old);
+  if (idx !== -1) bakedLayers[idx] = next;
+}
+
+function rebuildShuttleEntry(e: ShuttleEntry, actorDists: readonly DistrictRange[]): void {
+  const old = e.layer;
+  const next = makeShuttleLayer(
+    { motionScale: e.motionScale, yMotionScale: e.yMotionScale, label: e.label, districts: actorDists },
+    shuttleDebugToggle,
+  );
+  planet.replaceActorLayer(old, next);
+  e.layer = next;
+  const i = shuttleLayers.indexOf(old);
+  if (i !== -1) shuttleLayers[i] = next;
+}
+
+function applyDistricts(districts: District[]): void {
+  activeDistricts = districts;
+  const actorDists = computeActorDistricts(districts);
+  planet.animators.length = 0;
+  const nextFront = makeTaperedFrontLayer(districts, planet.animators, registry);
+  planet.replaceLayer(activeFrontLayer, nextFront);
+  activeFrontLayer = nextFront;
+  for (const entry of backEntries) rebuildBackEntry(entry, districts);
+  for (const entry of actorEntries) entry.layer.reset(actorDists, entry.config);
+  const isSingle = districts.length <= 1;
+  for (const e of shuttleEntries) {
+    if (isSingle) { e.layer.clearShuttles(); e.layer.container.visible = false; }
+    else rebuildShuttleEntry(e, actorDists);
+  }
 }
 
 // --- screen-space debug overlays ---
@@ -249,9 +281,9 @@ testBlock.container.visible = false;
 planet.addActorLayer(testBlock);
 
 // Frontmost shuttle layer — its ppd/yMotionScale are the correct parallax basis.
-const testerLayer = shuttleLayers[shuttleLayers.length - 1];
-explosionTester.onSpawn = (deg, y, cfg) => testerLayer.spawnExplosionAt({ deg, y }, cfg);
-shuttleTester.onSpawn   = (deg, cfg) => testerLayer.spawnShuttleAt(deg, cfg);
+const frontShuttle = () => shuttleLayers[shuttleLayers.length - 1];
+explosionTester.onSpawn = (deg, y, cfg) => frontShuttle()?.spawnExplosionAt({ deg, y }, cfg);
+shuttleTester.onSpawn   = (deg, cfg) => frontShuttle()?.spawnShuttleAt(deg, cfg);
 shuttleTester.onClear   = ()         => { for (const sl of shuttleLayers) sl.clearShuttles(); };
 
 const updateCursor = () => {
@@ -271,12 +303,14 @@ app.canvas.addEventListener('click', (e) => {
   }
 
   if (!explosionTester.isVisible && !shuttleTester.isVisible) return;
-  const deg = planet.xDeg + (cx - app.renderer.width / 2) / (testerLayer.layerPpd * zoom);
-  const y   = cy / zoom + planet.cameraY * testerLayer.layerYMotionScale;
+  const deg = planet.xDeg + (cx - app.renderer.width / 2) / (frontShuttle()!.layerPpd * zoom);
+  const y   = cy / zoom + planet.cameraY * frontShuttle()!.layerYMotionScale;
   if (explosionTester.isVisible) explosionTester.spawnAt(deg, y);
   if (shuttleTester.isVisible)   shuttleTester.spawnAt(deg, y);
 });
 
+layoutPanel.onLayoutChange = applyDistricts;
+debugPanel.onLayoutToggle  = () => layoutPanel.toggle();
 debugPanel.onAnnihilate = () => { for (const sl of shuttleLayers) sl.annihilate(); };
 debugPanel.onExplosionTesterToggle = () => { explosionTester.toggle(); updateCursor(); };
 debugPanel.onShuttleTesterToggle   = () => { shuttleTester.toggle();   updateCursor(); };
@@ -291,10 +325,6 @@ engineTester.onCameraLock  = (locked) => {
 };
 debugPanel.onPaletteChange  = (idx) => { applyPalette(PALETTES[idx]); userPanel.setPalette(idx); };
 debugPanel.onAutopanChange  = (speed) => planet.setAutoPan(speed);
-debugPanel.onDistrict1TaperChange  = (c) => { district1State = c; rebuildFrontLayer(); };
-debugPanel.onDistrict1TaperRelease = (c) => { district1State = c; rebuildBackLayers(); };
-debugPanel.onDistrict2TaperChange  = (c) => { district2State = c; rebuildFrontLayer(); };
-debugPanel.onDistrict2TaperRelease = (c) => { district2State = c; rebuildBackLayers(); };
 function applyLightPalette(lp: LightPalette): void {
   setLightColors(lp.warmColor, lp.coolColor);
   for (const sl of shuttleLayers) sl.setLightColors({ warm: lp.warmColor, cool: lp.coolColor });

@@ -15,7 +15,7 @@ import type { SliceFactory } from "./render/slice-ring";
 import { makeBackCityFactory, makeBackEmptySliceFactory, makeDeepCoreFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
 import { sliceTaperParams, proportionalTaperParams, type TaperConfig, type District } from "./render/district-taper";
 export type { TaperConfig, TaperShape, District } from "./render/district-taper";
-export { DEFAULT_TAPER, DEFAULT_DISTRICT2_TAPER } from "./render/district-taper";
+export { DEFAULT_TAPER, DEFAULT_DISTRICT2_TAPER, districtMass } from "./render/district-taper";
 import type { Animator } from "./render/layer-factories";
 import type { BuildingRegistry } from "./render/buildings";
 
@@ -109,6 +109,17 @@ export class Planet {
     this.root.addChildAt(newLayer.container, rootIdx);
     this.layers[idx] = newLayer;
     if (this.interactionLayer === old) this.interactionLayer = newLayer;
+  }
+
+  replaceActorLayer(old: ActorLike, next: ActorLike): void {
+    const idx = this.actorLayers.indexOf(old);
+    if (idx === -1) return;
+    const rootIdx = this.root.getChildIndex(old.container);
+    this.root.removeChild(old.container);
+    old.container.destroy({ children: true });
+    next.container.eventMode = 'none';
+    this.root.addChildAt(next.container, rootIdx);
+    this.actorLayers[idx] = next;
   }
 
   get xDeg():     number { return this.world.xDeg; }

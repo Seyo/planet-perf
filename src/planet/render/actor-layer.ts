@@ -6,13 +6,14 @@ const BASE_PPD = 24; // 120px / 5deg — matches all building rings
 const SURFACE_Y          =  -2; // top of dirt — matches surfaceY in makeGroundSectionFactory
 const ARRIVAL_THRESHOLD  =   3; // px world-space
 const DEGS_PER_SLICE     =   5;
-const CARS_PER_SLICE_MIN =   2;
-const CARS_PER_SLICE_MAX =   4;
+const CARS_PER_SLICE_MIN =   1;
+const CARS_PER_SLICE_MAX =   6;
+const CARS_MASS_FALLBACK = 0.3;
 const DEST_SLICE_SPREAD  =   3; // search up to ±3 slices for destination buildings
 
 const HEADLIGHT_COLORS = [0xfffde0, 0xfff0a0, 0xffd060, 0xffa040, 0xff8820];
 
-export type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
+export type DistrictRange = { readonly startDeg: number; readonly endDeg: number; readonly mass?: number };
 
 export type ActorLayerConfig = {
   motionScale:  number;
@@ -68,7 +69,7 @@ class Car {
       : Math.random() * 360;
     this.y          = SURFACE_Y;
     this.destDeg    = this.deg;
-    this.speed      = 0.25 + Math.random() * 0.35;
+    this.speed      = 0.12 + Math.random() * 0.18;
     const halfLen   = 2 + Math.random() ** 2 * 4;
     const headColor = HEADLIGHT_COLORS[Math.floor(Math.random() * HEADLIGHT_COLORS.length)];
     this.gfx        = makeCar({ halfLen, headColor });
@@ -148,6 +149,17 @@ export class ActorLayer {
     for (const car of this.cars) this.container.addChild(car.gfx);
   }
 
+  reset(districts: readonly DistrictRange[], config: ActorLayerConfig): void {
+    for (const car of this.cars) {
+      this.container.removeChild(car.gfx);
+      car.gfx.destroy({ children: true });
+    }
+    this.cars.splice(0);
+    const newCars = districts.length > 0 ? makeCarsForDistricts(config, districts) : [];
+    for (const car of newCars) this.container.addChild(car.gfx);
+    this.cars.push(...newCars);
+  }
+
   update(dt: number) {
     for (const car of this.cars) car.update(dt);
   }
@@ -173,7 +185,8 @@ function makeCarsForDistricts(config: ActorLayerConfig, districts: readonly Dist
   const layerKey = config.layerKey ?? '';
   return districts.flatMap(d => {
     const sliceCount   = Math.max(1, Math.round((d.endDeg - d.startDeg) / DEGS_PER_SLICE));
-    const carsPerSlice = CARS_PER_SLICE_MIN + Math.floor(Math.random() * (CARS_PER_SLICE_MAX - CARS_PER_SLICE_MIN + 1));
+    const t            = Math.sqrt(Math.min(1, d.mass ?? CARS_MASS_FALLBACK));
+    const carsPerSlice = CARS_PER_SLICE_MIN + Math.round(t * (CARS_PER_SLICE_MAX - CARS_PER_SLICE_MIN));
     return Array.from({ length: sliceCount * carsPerSlice }, () => new Car(config.motionScale, registry, layerKey, d));
   });
 }
