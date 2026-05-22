@@ -8,6 +8,29 @@ const SURFACE_Y = -2;
 const FIZZLE_FADE_FRAMES = 20;
 const LAYOUT_CULL_PAD = 400;
 
+export type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
+type CruisePicker = (deg: number) => { dirSign: number; cruiseDegLimit: number } | null;
+
+function pickFromDistrict(districts: readonly DistrictRange[], depIdx: number): { startDeg: number; endDeg: number } {
+  const candidates = districts.filter((_, i) => i !== depIdx);
+  return candidates.length > 0
+    ? candidates[Math.floor(Math.random() * candidates.length)]
+    : districts[Math.floor(Math.random() * districts.length)];
+}
+
+function makeCruisePicker(districts: readonly DistrictRange[]): CruisePicker | undefined {
+  if (districts.length < 2) return undefined;
+  return (deg: number): { dirSign: number; cruiseDegLimit: number } | null => {
+    const norm   = ((deg % 360) + 360) % 360;
+    const depIdx = districts.findIndex(d => norm >= d.startDeg && norm < d.endDeg);
+    const target = pickFromDistrict(districts, depIdx);
+    const tDeg   = target.startDeg + Math.random() * (target.endDeg - target.startDeg);
+    let diff     = ((tDeg - norm + 360) % 360);
+    if (diff > 180) diff -= 360;
+    return { dirSign: diff >= 0 ? 1 : -1, cruiseDegLimit: Math.abs(diff) };
+  };
+}
+
 // Callout geometry (world-space units)
 const CALLOUT_RING  = 5;
 const CALLOUT_DIAG  = 15;
@@ -297,14 +320,16 @@ class Shuttle {
   private flyingFrames     = 0;
   public pendingExplosion: ExplosionOrigin | null = null;
   private readonly halfLen: number;
+  private readonly pickTarget: CruisePicker | undefined;
 
   get isFlying(): boolean {
     return this.phase !== 'grounded' && this.phase !== 'dying';
   }
 
-  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, startDeg?: number) {
-    this.config    = config;
-    this.deg       = startDeg ?? Math.random() * 360;
+  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, init?: { startDeg?: number; pickTarget?: CruisePicker }) {
+    this.config      = config;
+    this.pickTarget  = init?.pickTarget;
+    this.deg         = init?.startDeg ?? Math.random() * 360;
     this.halfLen   = config.bodyHalfLenMin
       + Math.random() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
     this.maxSpeed  = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
@@ -356,14 +381,20 @@ class Shuttle {
   }
 
   private launch() {
-    this.dirSign        = Math.random() < 0.5 ? 1 : -1;
-    this.cruiseY        = this.config.cruiseYMin
+    const target = this.pickTarget?.(this.deg) ?? null;
+    if (target !== null) {
+      this.dirSign        = target.dirSign;
+      this.cruiseDegLimit = target.cruiseDegLimit;
+    } else {
+      this.dirSign        = Math.random() < 0.5 ? 1 : -1;
+      this.cruiseDegLimit = this.config.cruiseDegMin
+        + Math.random() * (this.config.cruiseDegMax - this.config.cruiseDegMin);
+    }
+    this.cruiseY     = this.config.cruiseYMin
       + Math.random() * (this.config.cruiseYMax - this.config.cruiseYMin);
-    this.cruiseDegLimit = this.config.cruiseDegMin
-      + Math.random() * (this.config.cruiseDegMax - this.config.cruiseDegMin);
-    this.traveledDeg    = 0;
-    this.willExplode    = Math.random() < this.config.explodeChance;
-    this.phase          = 'ascending';
+    this.traveledDeg = 0;
+    this.willExplode = Math.random() < this.config.explodeChance;
+    this.phase       = 'ascending';
   }
 
   triggerExplosion() {
@@ -513,7 +544,7 @@ class Shuttle {
 
 // ─── ShuttleLayer ─────────────────────────────────────────────────────────────
 
-export type ShuttleLayerSpec = { motionScale: number; yMotionScale: number; label: string };
+export type ShuttleLayerSpec = { motionScale: number; yMotionScale: number; label: string; districts?: readonly DistrictRange[] };
 type ShuttleLayerInit = ShuttleLayerSpec & { count: number };
 
 export class ShuttleLayer {
@@ -532,7 +563,8 @@ export class ShuttleLayer {
     this.yMotionScale = init.yMotionScale;
     this.debugToggle  = debugToggle;
     this.ppd          = BASE_PPD * init.motionScale;
-    this.shuttles     = Array.from({ length: init.count }, () => new Shuttle(this.colors, init.label));
+    const picker      = init.districts ? makeCruisePicker(init.districts) : undefined;
+    this.shuttles     = Array.from({ length: init.count }, () => new Shuttle(this.colors, init.label, DEFAULT_FLIGHT_CONFIG, { pickTarget: picker }));
     for (const s of this.shuttles) this.container.addChild(s.gfx);
   }
 
@@ -606,7 +638,7 @@ export class ShuttleLayer {
   }
 
   spawnShuttleAt(deg: number, cfg: FlightConfig): void {
-    const s = new Shuttle(this.colors, 'tester', cfg, deg);
+    const s = new Shuttle(this.colors, 'tester', cfg, { startDeg: deg });
     this.shuttles.push(s);
     this.container.addChild(s.gfx);
   }

@@ -80,12 +80,19 @@ const FAR_HAZE_BOOST      = 0.15; // extra haze opacity for grouped far layers
 let district1State: TaperConfig = { ...DEFAULT_TAPER };
 let district2State: TaperConfig = { ...DEFAULT_DISTRICT2_TAPER };
 
+const DEGS_PER_SLICE = 5;
+
 function getDistricts(): District[] {
   return [
     { startSlice:  0, sliceCount: 9, taperConfig: district1State },
     { startSlice: 36, sliceCount: 9, taperConfig: district2State },
   ];
 }
+
+const ACTOR_DISTRICTS = getDistricts().map(d => ({
+  startDeg: d.startSlice * DEGS_PER_SLICE,
+  endDeg:   (d.startSlice + d.sliceCount) * DEGS_PER_SLICE,
+}));
 
 type HazeEntry  = { container: Container; alpha: number; underground: boolean };
 type BackEntry  = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer; alpha: number };
@@ -141,7 +148,7 @@ for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
     planet.addActorLayer(makeActorLayer(motionScale, motionScale));
   }
   if (i >= ACTOR_LAYER_START && i < BACK_LAYER_COUNT - 5) {
-    const sl = makeShuttleLayer({ motionScale, yMotionScale: motionScale, label: String(i) }, shuttleDebugToggle);
+    const sl = makeShuttleLayer({ motionScale, yMotionScale: motionScale, label: String(i), districts: ACTOR_DISTRICTS }, shuttleDebugToggle);
     shuttleLayers.push(sl);
     planet.addActorLayer(sl);
   }
