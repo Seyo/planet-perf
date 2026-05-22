@@ -20,6 +20,8 @@ type Toggle = {
 
 type TaperSliderSpec = { label: string; value: number; min: number; max: number; step: number };
 
+const FPS_UPDATE_INTERVAL = 20;
+
 function makeTaperSliderRow(
   spec: TaperSliderSpec,
   onInput: (v: number) => void,
@@ -78,6 +80,7 @@ export class DebugPanel {
   private themeButtons = new Map<number, HTMLButtonElement>();
   private togglesWrap!: HTMLElement;
   private toggles: Map<string, Toggle> = new Map();
+  private fpsTick = 0;
   private autopanSpeed = 0;
 
   onPaletteChange?: (idx: number) => void;
@@ -200,7 +203,10 @@ export class DebugPanel {
     this.setText('cameraY', state.cameraY.toFixed(1) + ' px');
     this.setText('vY',      state.vY.toFixed(3) + ' px/t');
     this.setText('zoom',    state.zoom.toFixed(3) + '×');
-    this.setText('fps',     state.fps.toFixed(1));
+    if (++this.fpsTick >= FPS_UPDATE_INTERVAL) {
+      this.fpsTick = 0;
+      this.setText('fps', state.fps.toFixed(1));
+    }
     this.setText('size',    `${state.viewportW} × ${state.viewportH}`);
   }
 
