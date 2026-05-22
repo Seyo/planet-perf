@@ -65,6 +65,14 @@ function injectSliderStyles(): void {
     '.up-range::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:rgba(200,200,255,0.9);cursor:pointer;border:none;margin-top:-4px}',
     '.up-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:rgba(200,200,255,0.9);cursor:pointer;border:none}',
     '.up-range::-webkit-slider-runnable-track{height:4px;border-radius:2px}',
+    '.up-range2{position:relative;height:20px}',
+    '.up-range2>input[type=range]{position:absolute;left:0;width:100%;height:100%;margin:0;padding:0;pointer-events:none;-webkit-appearance:none;appearance:none;background:transparent;outline:none;border:none}',
+    '.up-range2>input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:rgba(200,200,255,0.9);cursor:pointer;pointer-events:all;border:none;margin-top:-4px}',
+    '.up-range2>input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:rgba(200,200,255,0.9);cursor:pointer;pointer-events:all;border:none}',
+    '.up-range2>input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:transparent}',
+    '.up-range2>input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:transparent;border:none}',
+    '.up-range2-track{position:absolute;left:0;right:0;top:50%;height:4px;transform:translateY(-50%);border-radius:2px;background:rgba(255,255,255,0.12);pointer-events:none;overflow:hidden}',
+    '.up-range2-fill{position:absolute;top:0;height:100%;background:rgba(140,140,255,0.6)}',
   ].join('');
   document.head.appendChild(el);
 }
@@ -90,13 +98,18 @@ function makeThemeChip(t: Theme, palettes: Palette[], lights: LightPalette[]): H
   return chip;
 }
 
-export type PanelConfig = { initialPaletteIdx?: number; initialLightsIdx?: number };
+export type PanelConfig = {
+  initialPaletteIdx?: number;
+  initialLightsIdx?:  number;
+  layerCount?:        number;
+};
 
 export class UserPanel {
-  onPaletteChange: ((index: number) => void) | undefined;
-  onLightsChange:  ((index: number) => void) | undefined;
-  onAnnihilate:    (() => void) | undefined;
-  onAutopanChange: ((speed: number) => void) | undefined;
+  onPaletteChange:    ((index: number) => void) | undefined;
+  onLightsChange:     ((index: number) => void) | undefined;
+  onAnnihilate:       (() => void) | undefined;
+  onAutopanChange:    ((speed: number) => void) | undefined;
+  onLayerRangeChange: ((back: number, front: number) => void) | undefined;
 
   private activePalette = 0;
   private activeLights  = 0;
@@ -108,6 +121,10 @@ export class UserPanel {
   private sliderEl:   HTMLInputElement | null = null;
   private speedLabel: HTMLElement      | null = null;
   private readonly panel: HTMLElement;
+  private readonly layerMax: number;
+  private layerBack  = 0;
+  private layerFront: number;
+  private layerFillEl: HTMLElement | null = null;
 
   constructor(
     private readonly palettes: Palette[],
@@ -117,6 +134,8 @@ export class UserPanel {
   ) {
     this.activePalette = config.initialPaletteIdx ?? 0;
     this.activeLights  = config.initialLightsIdx  ?? 0;
+    this.layerMax      = (config.layerCount ?? 1) - 1;
+    this.layerFront    = this.layerMax;
     this.panel = this.buildPanel();
     document.body.appendChild(this.panel);
     document.body.appendChild(this.buildToggle());
@@ -216,6 +235,7 @@ export class UserPanel {
     panel.appendChild(this.buildLightsSection());
     panel.appendChild(this.buildThemeSection());
     panel.appendChild(this.buildAutopanSection());
+    panel.appendChild(this.buildLayerRangeSection());
     panel.appendChild(this.buildAnnihilateButton());
     return panel;
   }
@@ -321,6 +341,77 @@ export class UserPanel {
     row.appendChild(slider);
     row.appendChild(label);
     return this.buildSection('AUTOPAN', row);
+  }
+
+  private makeDualRangeInput(value: number): HTMLInputElement {
+    const el = document.createElement('input');
+    el.type  = 'range';
+    el.min   = '0';
+    el.max   = String(this.layerMax);
+    el.step  = '1';
+    el.value = String(value);
+    return el;
+  }
+
+  private syncLayerFill(back: HTMLInputElement, front: HTMLInputElement): void {
+    const leftPct  = (this.layerBack  / this.layerMax) * 100;
+    const rightPct = (this.layerFront / this.layerMax) * 100;
+    if (this.layerFillEl) {
+      this.layerFillEl.style.left  = `${leftPct}%`;
+      this.layerFillEl.style.width = `${rightPct - leftPct}%`;
+    }
+    back.style.zIndex  = this.layerBack >= this.layerMax ? '4' : '3';
+    front.style.zIndex = this.layerBack >= this.layerMax ? '3' : '4';
+  }
+
+  private buildLayerRangeSection(): HTMLElement {
+    injectSliderStyles();
+    const track = makeDiv({});
+    track.className = 'up-range2-track';
+    const fill = makeDiv({});
+    fill.className  = 'up-range2-fill';
+    track.appendChild(fill);
+    this.layerFillEl = fill;
+
+    const wrap = makeDiv({});
+    wrap.className = 'up-range2';
+    wrap.appendChild(track);
+
+    const back  = this.makeDualRangeInput(this.layerBack);
+    const front = this.makeDualRangeInput(this.layerFront);
+    const sync  = () => this.syncLayerFill(back, front);
+
+    back.addEventListener('input', () => {
+      this.layerBack = Math.min(parseInt(back.value), this.layerFront);
+      back.value = String(this.layerBack);
+      sync();
+      this.onLayerRangeChange?.(this.layerBack, this.layerFront);
+    });
+    front.addEventListener('input', () => {
+      this.layerFront = Math.max(parseInt(front.value), this.layerBack);
+      front.value = String(this.layerFront);
+      sync();
+      this.onLayerRangeChange?.(this.layerBack, this.layerFront);
+    });
+
+    wrap.appendChild(back);
+    wrap.appendChild(front);
+    sync();
+
+    const labelRow = makeDiv({ display: 'flex', justifyContent: 'space-between', marginTop: '2px' });
+    const lBack = document.createElement('span');
+    lBack.textContent = 'back';
+    const lFront = document.createElement('span');
+    lFront.textContent = 'front';
+    applyStyles(lBack,  { color: 'rgba(255,255,255,0.3)', fontSize: '9px' });
+    applyStyles(lFront, { color: 'rgba(255,255,255,0.3)', fontSize: '9px' });
+    labelRow.appendChild(lBack);
+    labelRow.appendChild(lFront);
+
+    const body = makeDiv({ display: 'flex', flexDirection: 'column', gap: '2px' });
+    body.appendChild(wrap);
+    body.appendChild(labelRow);
+    return this.buildSection('LAYERS', body);
   }
 
   private buildAnnihilateButton(): HTMLElement {

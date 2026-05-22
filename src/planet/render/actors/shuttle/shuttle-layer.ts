@@ -84,6 +84,7 @@ type Tick = { dt: number };
 
 // Configuration for a shuttle callout label overlay.
 type CalloutConfig = { label: string };
+type Callout = { container: Container; updateLabel: (s: string) => void };
 
 // Common interface for pruneable effects (explosions, debris).
 type Effect = { isDone(): boolean; gfx: Container };
@@ -113,16 +114,14 @@ function getDebrisGlowAlpha(t: number): number {
 }
 
 
-function makeCallout(config: CalloutConfig): Container {
+function makeCallout(config: CalloutConfig): Callout {
   const c = new Container();
 
-  // Selection ring around the shuttle body
   const ring = new Graphics()
     .circle(0, 0, CALLOUT_RING)
     .stroke({ color: 0xffffff, width: 0.5, alpha: 0.75 });
 
-  // 45° line starting from the ring edge, then horizontal
-  const edge = CALLOUT_RING * Math.SQRT1_2; // point on ring in the 45° up-right direction
+  const edge = CALLOUT_RING * Math.SQRT1_2;
   const lines = new Graphics();
   lines
     .moveTo(edge, -edge)
@@ -130,7 +129,6 @@ function makeCallout(config: CalloutConfig): Container {
     .lineTo(CALLOUT_DIAG + CALLOUT_HORIZ, -CALLOUT_DIAG)
     .stroke({ color: 0xffffff, width: 0.5, alpha: 0.75 });
 
-  // Text vertically centred, anchored to the right end of the horizontal line
   const text = new Text({
     text: config.label,
     style: { fill: '#ffffff', fontSize: 7, fontFamily: 'monospace' },
@@ -140,7 +138,7 @@ function makeCallout(config: CalloutConfig): Container {
   text.y = -CALLOUT_DIAG;
 
   c.addChild(ring, lines, text);
-  return c;
+  return { container: c, updateLabel: (s) => { text.text = s; } };
 }
 
 // ─── Explosion ────────────────────────────────────────────────────────────────
@@ -325,6 +323,8 @@ class Shuttle {
   private readonly trailGfx: Graphics;
   private readonly bodyGfx: Container;
   private readonly callout: Container;
+  private readonly debugGfx: Graphics;
+  private readonly updateCalloutLabel: (s: string) => void;
   private readonly maxSpeed: number;
   private readonly config: FlightConfig;
   private readonly engineTrail: EngineTrail;
@@ -338,6 +338,7 @@ class Shuttle {
   private cruiseSpeed    = 0;
   private cruiseDegLimit = 80;
   private traveledDeg    = 0;
+  private landingDeg: number | null = null;
   private willExplode      = false;
   private dyingTrailLen    = 0;
   private dyingTrailMax    = 0;
@@ -378,11 +379,15 @@ class Shuttle {
     this.bodyGfx = new Container();
     this.bodyGfx.addChild(body, nose);
 
-    this.callout = makeCallout({ label });
+    const callout = makeCallout({ label });
+    this.callout = callout.container;
     this.callout.visible = false;
+    this.updateCalloutLabel = callout.updateLabel;
+
+    this.debugGfx = new Graphics();
 
     this.gfx = new Container();
-    this.gfx.addChild(this.bodyGfx, this.trailGfx, this.callout);
+    this.gfx.addChild(this.bodyGfx, this.trailGfx, this.callout, this.debugGfx);
     this.startWait();
   }
 
@@ -412,12 +417,14 @@ class Shuttle {
     const target = this.pickTarget?.(this.deg) ?? null;
     let fullDeg: number;
     if (target !== null) {
-      this.dirSign = target.dirSign;
-      fullDeg      = target.cruiseDegLimit;
+      this.dirSign    = target.dirSign;
+      fullDeg         = target.cruiseDegLimit;
+      this.landingDeg = ((this.deg + fullDeg * this.dirSign) % 360 + 360) % 360;
     } else {
-      this.dirSign = Math.random() < 0.5 ? 1 : -1;
-      fullDeg      = this.config.cruiseDegMin
+      this.dirSign    = Math.random() < 0.5 ? 1 : -1;
+      fullDeg         = this.config.cruiseDegMin
         + Math.random() * (this.config.cruiseDegMax - this.config.cruiseDegMin);
+      this.landingDeg = null;
     }
     this.cruiseSpeed    = this.maxSpeed * Math.min(1, fullDeg / CRUISE_FULL_SPEED_DEG);
     const brakeDeg      = estimateDescentDeg(this.config, this.cruiseY, this.cruiseSpeed);
@@ -464,6 +471,16 @@ class Shuttle {
       this.deg = this.respawnDeg ? this.respawnDeg() : Math.random() * 360; // teleport off-screen before waiting
       this.startWait();
     }
+  }
+
+  // When entering cruise, recompute cruiseDegLimit from actual position+speed,
+  // so horizontal movement during ascent doesn't cause overshoot.
+  private recalcCruiseLimit(): void {
+    if (this.landingDeg === null) return;
+    const remainDeg = this.dirSign * normalize180(this.landingDeg - this.deg);
+    if (remainDeg <= 0) { this.phase = 'descending'; return; }
+    const brakeDeg = estimateDescentDeg(this.config, this.cruiseY, this.cruiseSpeed);
+    this.cruiseDegLimit = Math.max(0, remainDeg - brakeDeg);
   }
 
   private vertControlParams(): { targetY: number; pdGain: number } {
@@ -536,6 +553,7 @@ class Shuttle {
 
     if (this.phase === 'ascending' && Math.abs(this.y - this.cruiseY) < this.config.levelThreshold) {
       this.phase = 'cruising';
+      this.recalcCruiseLimit();
     }
     if (this.phase === 'cruising' && this.checkCruisingPhase(tick)) return;
     if (this.phase === 'descending' && this.y >= SURFACE_Y - this.config.landThreshold) {
@@ -559,8 +577,25 @@ class Shuttle {
       : 1;
   }
 
+  private drawDebugInfo(view: CameraView): void {
+    this.debugGfx.clear();
+    if (this.landingDeg === null || !this.isFlying) return;
+    const remainDeg = this.dirSign * normalize180(this.landingDeg - this.deg);
+    this.updateCalloutLabel(`${remainDeg.toFixed(1)}°`);
+    const dx = normalize180(this.landingDeg - this.deg) * view.ppd;
+    const dy = SURFACE_Y - this.y;
+    this.debugGfx
+      .moveTo(0, 0).lineTo(dx, dy)
+      .stroke({ color: 0x44ddaa, alpha: 0.75, width: 1 });
+    this.debugGfx
+      .moveTo(dx - 3, dy).lineTo(dx + 3, dy)
+      .stroke({ color: 0x44ddaa, alpha: 1.0, width: 1.5 });
+  }
+
   drawTrail(view: CameraView) {
     this.callout.visible = view.showCallout;
+    this.debugGfx.visible = view.showCallout;
+    if (view.showCallout) this.drawDebugInfo(view);
     if (this.phase === 'grounded') { this.trailGfx.clear(); return; }
 
     const dying     = this.phase === 'dying';

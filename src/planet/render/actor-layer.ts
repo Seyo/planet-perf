@@ -1,21 +1,30 @@
 import { Container, Graphics } from "pixi.js";
 import { normalize180 } from "../math";
+import type { BuildingBounds, BuildingRegistry } from "./buildings";
 
 const BASE_PPD = 24; // 120px / 5deg — matches all building rings
-const Y_SKY_MIN       = -200;
-const SURFACE_Y       =   -2; // top of dirt — matches surfaceY in makeGroundSectionFactory
-const DEST_DEG_SPREAD = 25; // max ±deg for next destination
-const ARRIVAL_THRESHOLD = 3; // px world-space
-const DEGS_PER_SLICE  = 5;
-const CARS_PER_SLICE_MIN = 2;
-const CARS_PER_SLICE_MAX = 4;
+const SURFACE_Y          =  -2; // top of dirt — matches surfaceY in makeGroundSectionFactory
+const ARRIVAL_THRESHOLD  =   3; // px world-space
+const DEGS_PER_SLICE     =   5;
+const CARS_PER_SLICE_MIN =   2;
+const CARS_PER_SLICE_MAX =   4;
+const DEST_SLICE_SPREAD  =   3; // search up to ±3 slices for destination buildings
 
-// Headlight colors: warm white → amber → orange
 const HEADLIGHT_COLORS = [0xfffde0, 0xfff0a0, 0xffd060, 0xffa040, 0xff8820];
 
 export type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
 
-function makeCar(halfLen: number, headColor: number): Container {
+export type ActorLayerConfig = {
+  motionScale:  number;
+  yMotionScale: number;
+  registry?:    BuildingRegistry;
+  layerKey?:    string;
+};
+
+type CarAppearance = { halfLen: number; headColor: number };
+
+function makeCar(app: CarAppearance): Container {
+  const { halfLen, headColor } = app;
   const c = new Container();
   const body      = new Graphics().rect(-halfLen, -0.5, halfLen * 2, 1).fill(0x111111);
   const frontGlow = new Graphics().circle(halfLen, 0, 1.5).fill({ color: headColor, alpha: 0.12 });
@@ -26,34 +35,43 @@ function makeCar(halfLen: number, headColor: number): Container {
   return c;
 }
 
-function spawnDeg(district: DistrictRange | null): number {
-  if (!district) return Math.random() * 360;
-  return district.startDeg + Math.random() * (district.endDeg - district.startDeg);
-}
-
 class Car {
   deg: number;
   y: number;
   vDeg = 0;
-  vY = 0;
   destDeg: number;
-  destY: number;
   readonly gfx: Container;
   private speed: number;
   private dirSign = 1;
   private readonly district: DistrictRange | null;
-  onScreen = false;    // set each frame by ActorLayer.layout()
+  private readonly registry: BuildingRegistry | null;
+  private readonly layerKey: string;
+  private readonly layerPpd: number;
+  private readonly startSlice: number;
+  private readonly endSlice: number;
+  onScreen = false;
 
-  constructor(district: DistrictRange | null = null) {
-    this.district = district;
-    this.deg     = spawnDeg(district);
-    this.y       = Y_SKY_MIN + Math.random() * (SURFACE_Y - Y_SKY_MIN);
-    this.destDeg = this.deg;
-    this.destY   = this.y;
-    this.speed   = 0.25 + Math.random() * 0.35;
+  constructor(
+    motionScale: number,
+    registry: BuildingRegistry | null,
+    layerKey: string,
+    district: DistrictRange | null = null,
+  ) {
+    this.registry   = registry;
+    this.layerKey   = layerKey;
+    this.layerPpd   = BASE_PPD * motionScale;
+    this.district   = district;
+    this.startSlice = district ? Math.floor(district.startDeg / DEGS_PER_SLICE) : 0;
+    this.endSlice   = district ? Math.floor(district.endDeg   / DEGS_PER_SLICE) : 71;
+    this.deg        = district
+      ? district.startDeg + Math.random() * (district.endDeg - district.startDeg)
+      : Math.random() * 360;
+    this.y          = SURFACE_Y;
+    this.destDeg    = this.deg;
+    this.speed      = 0.25 + Math.random() * 0.35;
     const halfLen   = 2 + Math.random() ** 2 * 4;
     const headColor = HEADLIGHT_COLORS[Math.floor(Math.random() * HEADLIGHT_COLORS.length)];
-    this.gfx        = makeCar(halfLen, headColor);
+    this.gfx        = makeCar({ halfLen, headColor });
     this.pickNewDest();
   }
 
@@ -62,42 +80,58 @@ class Car {
     return Math.max(this.district.startDeg, Math.min(this.district.endDeg, raw));
   }
 
-  private globalDestDeg(spread: number): number {
-    const s = this.onScreen && spread !== 0 && Math.sign(spread) !== this.dirSign ? -spread : spread;
-    return ((this.deg + s) % 360 + 360) % 360;
+  private randomBuilding(sliceIndex: number): BuildingBounds | null {
+    if (!this.registry) return null;
+    const buildings = this.registry.getBuildings(sliceIndex, this.layerKey);
+    if (buildings.length === 0) return null;
+    let total = 0;
+    for (const b of buildings) total += b.yBottom - b.yTop;
+    let pick = Math.random() * total;
+    for (const b of buildings) {
+      pick -= b.yBottom - b.yTop;
+      if (pick <= 0) return b;
+    }
+    return buildings[buildings.length - 1];
   }
 
   private pickNewDest() {
-    const rawSpread = (Math.random() * 2 - 1) * DEST_DEG_SPREAD;
-    this.destDeg = this.district
-      ? this.clampDeg(this.deg + rawSpread)
-      : this.globalDestDeg(rawSpread);
-    this.destY = Math.max(Y_SKY_MIN, Math.min(SURFACE_Y, this.y + (Math.random() * 2 - 1) * 40));
+    const nd           = ((this.deg % 360) + 360) % 360;
+    const currentSlice = Math.floor(nd / DEGS_PER_SLICE);
+    const spread       = Math.round((Math.random() * 2 - 1) * DEST_SLICE_SPREAD);
+    const destSlice    = Math.max(this.startSlice, Math.min(this.endSlice, currentSlice + spread));
+
+    const src = this.randomBuilding(currentSlice);
+    const dst = this.randomBuilding(destSlice);
+
+    if (src && dst) {
+      const yTopShared = Math.max(src.yTop, dst.yTop);
+      const yBotShared = Math.min(src.yBottom, dst.yBottom);
+      if (yTopShared < yBotShared) {
+        this.y = yTopShared + Math.random() * (yBotShared - yTopShared);
+      }
+      const dstCenterX = (dst.xLeft + dst.xRight) / 2;
+      this.destDeg = this.clampDeg(destSlice * DEGS_PER_SLICE + dstCenterX / this.layerPpd);
+    } else {
+      const rawSpread  = (Math.random() * 2 - 1) * DEST_SLICE_SPREAD * DEGS_PER_SLICE;
+      this.destDeg     = this.clampDeg(this.deg + rawSpread);
+    }
+
     this.recomputeVelocity();
   }
 
   private recomputeVelocity() {
     const dxDeg = normalize180(this.destDeg - this.deg);
-    const dxPx  = dxDeg * BASE_PPD;
-    const dyPx  = this.destY - this.y;
-    const len   = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
-    if (len < 0.01) { this.pickNewDest(); return; }
-    this.vDeg = (dxPx / len) * this.speed / BASE_PPD;
-    this.vY   = (dyPx / len) * this.speed;
+    if (Math.abs(dxDeg) < 0.01) { this.pickNewDest(); return; }
+    this.vDeg = Math.sign(dxDeg) * this.speed / BASE_PPD;
     if (this.vDeg !== 0) this.dirSign = Math.sign(this.vDeg);
   }
 
   update(dt: number) {
     this.deg = this.clampDeg(this.deg + this.vDeg * dt);
-    this.y  += this.vY * dt;
-
-    const dxDeg = normalize180(this.destDeg - this.deg);
-    const dxPx  = dxDeg * BASE_PPD;
-    const dyPx  = this.destY - this.y;
-    if (Math.sqrt(dxPx * dxPx + dyPx * dyPx) < ARRIVAL_THRESHOLD) this.pickNewDest();
-
-    // Orient car to face direction of travel
-    this.gfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
+    if (Math.abs(normalize180(this.destDeg - this.deg)) * BASE_PPD < ARRIVAL_THRESHOLD) {
+      this.pickNewDest();
+    }
+    this.gfx.rotation = this.dirSign > 0 ? 0 : Math.PI;
   }
 }
 
@@ -105,14 +139,12 @@ export class ActorLayer {
   readonly container = new Container();
   private readonly cars: Car[];
   private readonly ppd: number;
+  private readonly yMotionScale: number;
 
-  constructor(
-    private readonly motionScale: number,
-    private readonly yMotionScale: number,
-    cars: Car[],
-  ) {
-    this.ppd  = BASE_PPD * motionScale;
-    this.cars = cars;
+  constructor(config: ActorLayerConfig, cars: Car[]) {
+    this.ppd          = BASE_PPD * config.motionScale;
+    this.yMotionScale = config.yMotionScale;
+    this.cars         = cars;
     for (const car of this.cars) this.container.addChild(car.gfx);
   }
 
@@ -122,7 +154,7 @@ export class ActorLayer {
 
   layout(cameraDeg: number, zoom: number, viewWidthPx: number, cameraY: number) {
     this.container.y = -cameraY * this.yMotionScale;
-    const halfW = viewWidthPx / 2;
+    const halfW    = viewWidthPx / 2;
     const CULL_PAD = 150;
 
     for (const car of this.cars) {
@@ -130,27 +162,27 @@ export class ActorLayer {
       car.gfx.x     = relDeg * this.ppd;
       car.gfx.y     = car.y;
       const screenX = car.gfx.x * zoom;
-      car.onScreen        = Math.abs(screenX) < halfW;
-      car.gfx.visible     = Math.abs(screenX) < halfW + CULL_PAD;
+      car.onScreen      = Math.abs(screenX) < halfW;
+      car.gfx.visible   = Math.abs(screenX) < halfW + CULL_PAD;
     }
   }
 }
 
-function makeCarsForDistricts(districts: readonly DistrictRange[]): Car[] {
+function makeCarsForDistricts(config: ActorLayerConfig, districts: readonly DistrictRange[]): Car[] {
+  const registry = config.registry ?? null;
+  const layerKey = config.layerKey ?? '';
   return districts.flatMap(d => {
-    const sliceCount = Math.max(1, Math.round((d.endDeg - d.startDeg) / DEGS_PER_SLICE));
+    const sliceCount   = Math.max(1, Math.round((d.endDeg - d.startDeg) / DEGS_PER_SLICE));
     const carsPerSlice = CARS_PER_SLICE_MIN + Math.floor(Math.random() * (CARS_PER_SLICE_MAX - CARS_PER_SLICE_MIN + 1));
-    return Array.from({ length: sliceCount * carsPerSlice }, () => new Car(d));
+    return Array.from({ length: sliceCount * carsPerSlice }, () => new Car(config.motionScale, registry, layerKey, d));
   });
 }
 
-export function makeActorLayer(
-  motionScale: number,
-  yMotionScale: number,
-  districts?: readonly DistrictRange[],
-): ActorLayer {
+export function makeActorLayer(config: ActorLayerConfig, districts?: readonly DistrictRange[]): ActorLayer {
+  const registry = config.registry ?? null;
+  const layerKey = config.layerKey ?? '';
   const cars = districts && districts.length > 0
-    ? makeCarsForDistricts(districts)
-    : Array.from({ length: 50 + Math.floor(Math.random() * 51) }, () => new Car(null));
-  return new ActorLayer(motionScale, yMotionScale, cars);
+    ? makeCarsForDistricts(config, districts)
+    : Array.from({ length: 50 + Math.floor(Math.random() * 51) }, () => new Car(config.motionScale, registry, layerKey, null));
+  return new ActorLayer(config, cars);
 }

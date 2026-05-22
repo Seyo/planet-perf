@@ -22,9 +22,10 @@ import { ShuttleTesterPanel }   from "./debug/shuttle-tester";
 import { EngineTesterPanel }    from "./debug/engine-tester";
 import { TestBlockLayer }       from "./planet/actors/engine";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
+import { BuildingBoundsOverlay, type BoundsLayerInfo } from "./debug/building-bounds-overlay";
 import { PALETTES, LIGHT_PALETTES, THEMES } from "./debug/palettes";
 import type { Palette, LightPalette } from "./debug/palettes";
-import { setLightColors } from "./planet/render/buildings";
+import { setLightColors, BuildingRegistry } from "./planet/render/buildings";
 import type { SliceLayer } from "./planet/render/slice-layer";
 
 const DEFAULT_PALETTE_IDX = PALETTES.findIndex(p => p.name === 'Sunrise');
@@ -56,6 +57,8 @@ try {
 document.body.appendChild(app.canvas);
 
 const planet = new Planet(app);
+const registry = new BuildingRegistry();
+const boundsLayerInfos: BoundsLayerInfo[] = [];
 
 // Back-to-front: first added = furthest back
 let activeSkyLayer: SliceLayer = makeSkyLayer(PALETTES[DEFAULT_PALETTE_IDX].skyGradient);
@@ -101,17 +104,30 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   const maxH        = Math.round(100 + t * 180);
   const salt        = 1000 + i * 97;
 
+  const hasActors   = i >= ACTOR_LAYER_START;
+  const layerKey    = hasActors ? `back:${i}` : undefined;
   const bakeResolution = i >= BACK_LAYER_COUNT - 5 ? 2 : 1;
-  const layerCfg = { motionScale, yMotionScale: motionScale, minH, maxH, salt, bakeResolution };
+  const layerCfg = {
+    motionScale, yMotionScale: motionScale, minH, maxH, salt, bakeResolution,
+    registry: hasActors ? registry : undefined,
+    layerKey,
+  };
   const rebuild = (districts: District[]) => makeBackCityLayer(layerCfg, districts);
   const backLayer = rebuild(getDistricts());
   backEntries.push({ layer: backLayer, rebuild });
   bakedLayers.push(backLayer);
   planet.addLayer(backLayer, { behindAll: true });
-  if (i >= ACTOR_LAYER_START) {
-    planet.addActorLayer(makeActorLayer(motionScale, motionScale, ACTOR_DISTRICTS));
+  if (hasActors) {
+    planet.addActorLayer(makeActorLayer({ motionScale, yMotionScale: motionScale, registry, layerKey }, ACTOR_DISTRICTS));
+    const layerT = (i - ACTOR_LAYER_START) / (BACK_LAYER_COUNT - 1 - ACTOR_LAYER_START);
+    boundsLayerInfos.push({
+      layerKey: layerKey!,
+      motionScale,
+      yMotionScale: motionScale,
+      color: lerpColor(0x882222, 0x22bb44, layerT),
+    });
   }
-  if (i >= ACTOR_LAYER_START && i < BACK_LAYER_COUNT - 5) {
+  if (hasActors && i < BACK_LAYER_COUNT - 5) {
     const sl = makeShuttleLayer({ motionScale, yMotionScale: motionScale, label: String(i), districts: ACTOR_DISTRICTS }, shuttleDebugToggle);
     shuttleLayers.push(sl);
     planet.addActorLayer(sl);
@@ -126,9 +142,10 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
 }
 
 planet.addLayer(makeGroundLayer(), { behindAll: true });
-let activeFrontLayer = makeTaperedFrontLayer(getDistricts(), planet.animators);
+let activeFrontLayer = makeTaperedFrontLayer(getDistricts(), planet.animators, registry);
 planet.addLayer(activeFrontLayer, { asInteractionLayer: true });
-planet.addActorLayer(makeActorLayer(1.0, 1.0, ACTOR_DISTRICTS));
+planet.addActorLayer(makeActorLayer({ motionScale: 1.0, yMotionScale: 1.0, registry, layerKey: 'front' }, ACTOR_DISTRICTS));
+boundsLayerInfos.push({ layerKey: 'front', motionScale: 1.0, yMotionScale: 1.0, color: 0x44ccff });
 
 const frontHazeContainer = makeHazeOverlay({ alpha: 0.25, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
 hazeEntries.push({ container: frontHazeContainer, alpha: 0.25, bottomAlpha: 0 });
@@ -136,9 +153,18 @@ planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();
 
+function lerpColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bv = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bv;
+}
+
 function rebuildFrontLayer() {
   planet.animators.length = 0;
-  const next = makeTaperedFrontLayer(getDistricts(), planet.animators);
+  const next = makeTaperedFrontLayer(getDistricts(), planet.animators, registry);
   planet.replaceLayer(activeFrontLayer, next);
   activeFrontLayer = next;
 }
@@ -155,6 +181,17 @@ function rebuildBackLayers() {
   }
 }
 
+function setLayerRange(back: number, front: number): void {
+  for (let i = 0; i < BACK_LAYER_COUNT; i++) {
+    const vis = i >= back && i <= front;
+    backEntries[i].layer.container.visible = vis;
+    hazeEntries[i].container.visible       = vis;
+  }
+  const frontVis = front >= BACK_LAYER_COUNT;
+  activeFrontLayer.container.visible                    = frontVis;
+  hazeEntries[hazeEntries.length - 1].container.visible = frontVis;
+}
+
 // --- screen-space debug overlays ---
 
 const sliceOverlay = new SliceLineOverlay();
@@ -163,12 +200,15 @@ app.stage.addChild(sliceOverlay.container);
 const yGridOverlay = new YGridOverlay();
 app.stage.addChild(yGridOverlay.container);
 
+const boundsOverlay = new BuildingBoundsOverlay();
+app.stage.addChild(boundsOverlay.container);
+
 // --- debug panel ---
 
 const debugPanel = new DebugPanel(PALETTES, LIGHT_PALETTES, THEMES);
 debugPanel.setActivePalette(DEFAULT_PALETTE_IDX);
 
-const userPanel = new UserPanel(PALETTES, LIGHT_PALETTES, THEMES, { initialPaletteIdx: DEFAULT_PALETTE_IDX });
+const userPanel = new UserPanel(PALETTES, LIGHT_PALETTES, THEMES, { initialPaletteIdx: DEFAULT_PALETTE_IDX, layerCount: BACK_LAYER_COUNT + 1 });
 
 // Standalone debug line — lives inside the sky layer so it follows its y-parallax.
 // Re-parented in applyPalette whenever the sky layer is replaced.
@@ -180,11 +220,12 @@ const hazeToggle = {
   set visible(v: boolean) { for (const e of hazeEntries) e.container.visible = v; },
 };
 
-debugPanel.registerToggle('sky-bottom',    'Sky bottom edge', skyBottomLine);
-debugPanel.registerToggle('slice-lines',  'Slice lines',     sliceOverlay.container);
-debugPanel.registerToggle('y-grid',       'Y grid',          yGridOverlay.container);
-debugPanel.registerToggle('shuttle-info', 'Shuttle info',    shuttleDebugToggle);
-debugPanel.registerToggle('haze',         'Haze',            hazeToggle);
+debugPanel.registerToggle('sky-bottom',      'Sky bottom edge',  skyBottomLine);
+debugPanel.registerToggle('slice-lines',    'Slice lines',      sliceOverlay.container);
+debugPanel.registerToggle('y-grid',         'Y grid',           yGridOverlay.container);
+debugPanel.registerToggle('building-bounds','Building bounds',  boundsOverlay.container);
+debugPanel.registerToggle('shuttle-info',   'Shuttle info',     shuttleDebugToggle);
+debugPanel.registerToggle('haze',           'Haze',             hazeToggle);
 
 function applyPalette(p: Palette): void {
   app.renderer.background.color = p.backgroundColor;
@@ -219,14 +260,19 @@ const updateCursor = () => {
 };
 
 app.canvas.addEventListener('click', (e) => {
-  if (!explosionTester.isVisible && !shuttleTester.isVisible) return;
   const rect = app.canvas.getBoundingClientRect();
   const dpr  = window.devicePixelRatio;
   const cx   = (e.clientX - rect.left) * dpr;
   const cy   = (e.clientY - rect.top)  * dpr;
   const zoom = planet.zoomLevel;
-  const deg  = planet.xDeg + (cx - app.renderer.width / 2) / (testerLayer.layerPpd * zoom);
-  const y    = cy / zoom + planet.cameraY * testerLayer.layerYMotionScale;
+
+  if (boundsOverlay.container.visible) {
+    boundsOverlay.handleClick(cx, cy, planet.xDeg, zoom, app.renderer.width, planet.cameraY, boundsLayerInfos, registry);
+  }
+
+  if (!explosionTester.isVisible && !shuttleTester.isVisible) return;
+  const deg = planet.xDeg + (cx - app.renderer.width / 2) / (testerLayer.layerPpd * zoom);
+  const y   = cy / zoom + planet.cameraY * testerLayer.layerYMotionScale;
   if (explosionTester.isVisible) explosionTester.spawnAt(deg, y);
   if (shuttleTester.isVisible)   shuttleTester.spawnAt(deg, y);
 });
@@ -268,7 +314,8 @@ debugPanel.onThemeChange = (paletteIdx, lightPaletteIdx) => {
 userPanel.onPaletteChange  = (idx) => { applyPalette(PALETTES[idx]); debugPanel.setActivePalette(idx); };
 userPanel.onLightsChange   = (idx) => { applyLightPalette(LIGHT_PALETTES[idx]); debugPanel.setActiveLightPalette(idx); };
 userPanel.onAnnihilate     = () => { for (const sl of shuttleLayers) sl.annihilate(); };
-userPanel.onAutopanChange  = (speed) => planet.setAutoPan(speed);
+userPanel.onAutopanChange    = (speed) => planet.setAutoPan(speed);
+userPanel.onLayerRangeChange = setLayerRange;
 
 const params = new URLSearchParams(window.location.search);
 
@@ -329,4 +376,5 @@ app.ticker.add((ticker) => {
   });
   sliceOverlay.update(planet.xDeg, planet.zoomLevel, app.renderer.width);
   yGridOverlay.update(planet.cameraY, planet.zoomLevel, app.renderer.width, app.renderer.height);
+  boundsOverlay.update(planet.xDeg, planet.zoomLevel, app.renderer.width, planet.cameraY, boundsLayerInfos, registry);
 });

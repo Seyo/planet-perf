@@ -17,6 +17,7 @@ import { sliceTaperParams, proportionalTaperParams, type TaperConfig, type Distr
 export type { TaperConfig, TaperShape, District } from "./render/district-taper";
 export { DEFAULT_TAPER, DEFAULT_DISTRICT2_TAPER } from "./render/district-taper";
 import type { Animator } from "./render/layer-factories";
+import type { BuildingRegistry } from "./render/buildings";
 
 export type WorldState = {
   xDeg: number;   // continuous, never wrapped
@@ -302,9 +303,10 @@ export function makeFrontLayer(animators?: Animator[], citySliceCount = 9) {
   return new SliceLayer(frontRing, 1.0, 1.0, 1.0);
 }
 
-export function makeTaperedFrontLayer(districts: District[], animators?: Animator[]) {
+export function makeTaperedFrontLayer(districts: District[], animators?: Animator[], registry?: BuildingRegistry) {
   const baseColor           = 0x060810;
   const sliceWidthPxAtZoom1 = 120;
+  const layerKey            = 'front';
   const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1, baseColor });
 
   const sliceFactoryMap = new Map<number, SliceFactory>();
@@ -313,7 +315,7 @@ export function makeTaperedFrontLayer(districts: District[], animators?: Animato
       const { density, maxH } = sliceTaperParams(j, d.sliceCount, d.taperConfig);
       sliceFactoryMap.set(
         d.startSlice + j,
-        makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density, maxH, baseColor }, animators),
+        makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density, maxH, baseColor, registry, layerKey }, animators),
       );
     }
   }
@@ -336,6 +338,8 @@ export type BackCityConfig = {
   underground?:    boolean;
   undergroundDim?: number;
   bakeResolution?: number;
+  registry?:       BuildingRegistry;
+  layerKey?:       string;
 };
 
 export function makeBackCityLayer(config: BackCityConfig = {}, districts?: District[]) {
@@ -350,6 +354,8 @@ export function makeBackCityLayer(config: BackCityConfig = {}, districts?: Distr
     underground    = false,
     undergroundDim = 0,
     bakeResolution = 1,
+    registry,
+    layerKey,
   } = config;
 
   const sliceWidth   = 120;
@@ -363,7 +369,7 @@ export function makeBackCityLayer(config: BackCityConfig = {}, districts?: Distr
       );
       sliceFactoryMap.set(
         d.startSlice + j,
-        makeBackCityFactory({ sliceWidthPxAtZoom1: sliceWidth, baseColor, density: dv, minH, maxH: mH, salt, underground, undergroundDim }),
+        makeBackCityFactory({ sliceWidthPxAtZoom1: sliceWidth, baseColor, density: dv, minH, maxH: mH, salt, underground, undergroundDim, registry, layerKey }),
       );
     }
   }

@@ -7,7 +7,8 @@ import {
   makeCanvas, commitCanvas, registerFlickerAnimators,
   drawBuilding, drawStreetLamps, drawBridge, drawDetailedGreebles, drawSimpleGreebles,
   FRONT_THEME, BACK_THEME,
-  type Animator, type BuildingRect, type BuildingTheme, type BuildingOpts, type SliceContext,
+  BuildingRegistry,
+  type Animator, type BuildingCanvas, type BuildingRect, type BuildingTheme, type BuildingOpts, type SliceContext,
 } from "./buildings";
 import type { SliceFactory } from "./slice-ring";
 
@@ -46,6 +47,10 @@ type FactoryOpts = {
   minH?: number;
   maxH?: number;
   skyGradient?: Array<{ offset: number; color: number }>;
+  underground?: boolean;
+  undergroundDim?: number;
+  registry?: BuildingRegistry;
+  layerKey?: string;
 };
 
 // Front: skyscrapers with glowing 1x1px windows
@@ -58,6 +63,8 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
     yBase     = 0,
     minH      = 20,
     maxH      = 280,
+    registry,
+    layerKey,
   } = opts;
 
   return (i) => {
@@ -103,6 +110,12 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
           chamferChance: 0.95,
         });
       }
+    }
+
+    if (registry && layerKey) {
+      registry.register(i, layerKey, built.map(b => ({
+        xLeft: b.x, xRight: b.x + b.w, yTop: yBase - b.h, yBottom: yBase,
+      })));
     }
 
     // Commit all buildings in a single batch, then register flicker animators once.
@@ -178,6 +191,8 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
     yBase     = 0,
     minH      = 40,
     maxH      = 280,
+    registry,
+    layerKey,
   } = opts;
 
   return (i) => {
@@ -190,6 +205,13 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
 
     buildBackFillers(ctx, randInt(rng, 2, 4));
     if (chance(rng, density)) buildBackTowers(ctx, randInt(rng, 1, 4), minH, maxH);
+
+    if (registry && layerKey) {
+      registry.register(i, layerKey, built.map(b => ({
+        xLeft: b.x, xRight: b.x + b.w, yTop: yBase - b.h, yBottom: yBase,
+      })));
+    }
+
     commitCanvas(root, buildingCanvas, theme);
 
     const sliceCanvas = makeCanvas(0);

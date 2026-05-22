@@ -11,3 +11,5 @@ export {
 } from './core';
 export { drawUndergroundCity } from './underground';
 export { drawBuildingDecorations } from './decorations';
+export type { BuildingBounds } from './registry';
+export { BuildingRegistry } from './registry';
