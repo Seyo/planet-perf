@@ -203,7 +203,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
       drawUndergroundCity(root, ugRng, built, { yBase, dim: undergroundDim });
     }
     root.addChild(
-      new Graphics().rect(0, yBase, sliceWidthPxAtZoom1, 100).fill({ color: baseColor }),
+      new Graphics().rect(0, yBase, sliceWidthPxAtZoom1, 75).fill({ color: baseColor }),
     );
 
     return root;
@@ -218,7 +218,7 @@ export function makeGroundSectionFactory(opts: FactoryOpts): SliceFactory {
   const soilY     =  13;
   const subsoilY  =  32;
   const stoneY    =  50;
-  const bottomY   =  62;
+  const bottomY   = 100;
 
   const pathColor    = 0x060810;
   const soilColor    = 0x2a1e0e;
