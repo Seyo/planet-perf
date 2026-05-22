@@ -298,7 +298,7 @@ export class DebugPanel {
         color: '#fff',
         transition: 'none',
       });
-      btn.addEventListener('click', () => onSelect(item.key));
+      btn.addEventListener('click', () => { onSelect(item.key); });
       buttons.set(item.key, btn);
       row.appendChild(btn);
     }
@@ -395,7 +395,7 @@ export class DebugPanel {
 
     copyBtn.addEventListener('click', () => {
       const text = this.buildThemePrompt();
-      navigator.clipboard.writeText(text).then(() => {
+      void navigator.clipboard.writeText(text).then(() => {
         copyBtn.textContent = 'copied!';
         setTimeout(() => { copyBtn.textContent = 'copy theme prompt'; }, 1500);
       });
@@ -483,7 +483,7 @@ export class DebugPanel {
       color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
     });
     copyUrlBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(this.buildLiveUrl()).then(() => {
+      void navigator.clipboard.writeText(this.buildLiveUrl()).then(() => {
         copyUrlBtn.textContent = 'copied!';
         setTimeout(() => { copyUrlBtn.textContent = 'copy live url'; }, 1500);
       });

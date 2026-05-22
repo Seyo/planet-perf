@@ -136,7 +136,7 @@ export class ShuttleTesterPanel {
     });
 
     const d    = decimalsForStep(spec.step);
-    const init = (this.config[spec.key] as number).toFixed(d);
+    const init = (this.config[spec.key]).toFixed(d);
 
     const lbl = document.createElement('span');
     lbl.textContent = spec.label;
@@ -188,7 +188,7 @@ export class ShuttleTesterPanel {
     return this.makeActionButton(
       'reset to defaults', '10px',
       { color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)' },
-      () => this.resetToDefaults(),
+      () => { this.resetToDefaults(); },
     );
   }
 
@@ -204,11 +204,11 @@ export class ShuttleTesterPanel {
     const defaults = DEFAULT_FLIGHT_CONFIG;
     for (const [, specs] of SECTIONS) {
       for (const spec of specs) {
-        const v = defaults[spec.key] as number;
+        const v = defaults[spec.key];
         const d = decimalsForStep(spec.step);
         (this.config as Record<string, number>)[spec.key] = v;
-        this.valueEls.get(spec.key)!.textContent  = v.toFixed(d);
-        this.sliderEls.get(spec.key)!.value = String(v);
+        (this.valueEls.get(spec.key) as HTMLSpanElement).textContent  = v.toFixed(d);
+        (this.sliderEls.get(spec.key) as HTMLInputElement).value = String(v);
       }
     }
   }

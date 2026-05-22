@@ -1,7 +1,7 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { normalize180, clamp, lerpColor } from "../../../math";
 import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, estimateDescentDeg, type FlightConfig, type ExplosionConfig } from './physics';
-import { distanceFlightPlan, type FlightPlan, type FlightPlanFn } from './flight-plan';
+import { distanceFlightPlan, type FlightPlanFn } from './flight-plan';
 import { EngineTrail, type EngineConfig } from '../../../actors/engine';
 
 const BASE_PPD = 24;
@@ -61,11 +61,6 @@ const CALLOUT_RING  = 5;
 const CALLOUT_DIAG  = 15;
 const CALLOUT_HORIZ = 18;
 
-const MAX_CLIMB_RATE   = DEFAULT_FLIGHT_CONFIG.maxClimbRate;
-const MAX_DESCENT_RATE = DEFAULT_FLIGHT_CONFIG.maxDescentRate;
-const MAX_VERT_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxVertAccel;
-const MAX_HORIZ_SPEED  = DEFAULT_FLIGHT_CONFIG.maxHorizSpeed;
-const MAX_TURN_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxTurnAccel;
 
 type Phase = 'grounded' | 'ascending' | 'cruising' | 'descending' | 'dying';
 
@@ -659,7 +654,8 @@ export class ShuttleLayer {
     this.debugToggle  = debugToggle;
     this.ppd          = BASE_PPD * init.motionScale;
     const picker      = init.districts ? makeCruisePicker(init.districts) : undefined;
-    const respawnDeg  = init.districts ? () => pickDegInDistricts(init.districts!) : undefined;
+    const districts   = init.districts;
+    const respawnDeg  = districts ? () => pickDegInDistricts(districts) : undefined;
     this.shuttles     = Array.from({ length: init.count }, () => {
       const startDeg = init.districts ? pickDegInDistricts(init.districts) : undefined;
       return new Shuttle(this.colors, init.label, DEFAULT_FLIGHT_CONFIG, { startDeg, pickTarget: picker, respawnDeg, planFn: init.planFn });

@@ -22,13 +22,6 @@ const DEFAULT_TAPER: TaperConfig = {
   shape:         'smooth',
 };
 
-const DEFAULT_DISTRICT2_TAPER: TaperConfig = {
-  centerDensity: 0.50,
-  edgeDensity:   0.75,
-  centerMaxH:    500,
-  edgeMaxH:       90,
-  shape:         'quad',
-};
 
 function applyShape(d: number, shape: TaperShape): number {
   if (shape === 'linear') return d;

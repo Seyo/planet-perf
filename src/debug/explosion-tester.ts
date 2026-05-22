@@ -124,7 +124,7 @@ export class ExplosionTesterPanel {
     });
 
     const d    = decimalsForStep(spec.step);
-    const init = (this.config[spec.key] as number).toFixed(d);
+    const init = (this.config[spec.key]).toFixed(d);
 
     const lbl = document.createElement('span');
     lbl.textContent = spec.label;
@@ -172,7 +172,7 @@ export class ExplosionTesterPanel {
       transition:   'none',
       display:      'block',
     });
-    btn.addEventListener('click', () => this.resetToDefaults());
+    btn.addEventListener('click', () => { this.resetToDefaults(); });
     return btn;
   }
 
@@ -180,11 +180,11 @@ export class ExplosionTesterPanel {
     const defaults = DEFAULT_EXPLOSION_CONFIG;
     for (const [, specs] of SECTIONS) {
       for (const spec of specs) {
-        const v = defaults[spec.key] as number;
+        const v = defaults[spec.key];
         const d = decimalsForStep(spec.step);
         (this.config as Record<string, number>)[spec.key] = v;
-        this.valueEls.get(spec.key)!.textContent  = v.toFixed(d);
-        this.sliderEls.get(spec.key)!.value = String(v);
+        (this.valueEls.get(spec.key) as HTMLSpanElement).textContent  = v.toFixed(d);
+        (this.sliderEls.get(spec.key) as HTMLInputElement).value = String(v);
       }
     }
   }

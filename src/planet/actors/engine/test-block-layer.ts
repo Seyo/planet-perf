@@ -55,8 +55,7 @@ export class TestBlockLayer implements ActorLike {
 
   updateConfig(patch: Partial<TestBlockConfig>): void {
     if (patch.engine) {
-      const needsReset = patch.engine.maxTrailPoints !== undefined
-        && patch.engine.maxTrailPoints !== this.config.engine.maxTrailPoints;
+      const needsReset = patch.engine.maxTrailPoints !== this.config.engine.maxTrailPoints;
       Object.assign(this.config.engine, patch.engine);
       if (needsReset) this.resetTrail();
       this.rebuildNose();

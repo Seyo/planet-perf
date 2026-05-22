@@ -6,15 +6,17 @@ export type BuildingBounds = {
   chamfer?: { corner: "tl" | "tr" | "both"; size: number };
 };
 
+type BoundsWithChamfer = BuildingBounds & { chamfer: NonNullable<BuildingBounds['chamfer']> };
+
 function inRect(b: BuildingBounds, x: number, y: number): boolean {
   return x >= b.xLeft && x <= b.xRight && y >= b.yTop && y <= b.yBottom;
 }
 
-function chamferHit(b: BuildingBounds, x: number, y: number): boolean {
+function chamferHit(b: BoundsWithChamfer, x: number, y: number): boolean {
   const rowFromTop = Math.floor(y - b.yTop);
-  if (rowFromTop >= b.chamfer!.size) return true;
-  const taper    = b.chamfer!.size - 1 - rowFromTop;
-  const corner   = b.chamfer!.corner;
+  if (rowFromTop >= b.chamfer.size) return true;
+  const taper    = b.chamfer.size - 1 - rowFromTop;
+  const corner   = b.chamfer.corner;
   const effLeft  = b.xLeft  + (corner !== "tr" ? taper : 0);
   const effRight = b.xRight - (corner !== "tl" ? taper : 0);
   return x >= effLeft && x <= effRight;
@@ -22,7 +24,7 @@ function chamferHit(b: BuildingBounds, x: number, y: number): boolean {
 
 function hitTest(b: BuildingBounds, x: number, y: number): boolean {
   if (!inRect(b, x, y)) return false;
-  return !b.chamfer || chamferHit(b, x, y);
+  return !b.chamfer || chamferHit(b as BoundsWithChamfer, x, y);
 }
 
 type SliceEntry = {

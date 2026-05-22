@@ -86,7 +86,7 @@ type WindowOpts = {
   warmChance?: number;
 };
 
-type Archetype = "squatT" | "stepped" | "staircase" | "twinStack";
+export type Archetype = "squatT" | "stepped" | "staircase" | "twinStack";
 
 export type BuildingOpts = {
   yBase:                number;
@@ -256,6 +256,7 @@ function drawWindowGrid(
 type ChamferCorner = "tl" | "tr" | "both";
 type Chamfer = { corner: ChamferCorner; size: number };
 export type Tier = { x: number; w: number; h: number; top: number; bottom: number; chamfer?: Chamfer };
+type TierWithChamfer = Tier & { chamfer: Chamfer };
 
 function pickColorDrift(rng: RNG, variance: number): { d: number } {
   if (variance <= 0) return { d: 0 };
@@ -278,12 +279,12 @@ function chooseArchetype(rng: RNG, h: number, weights: Partial<Record<Archetype,
     w.stepped *= 1.4;
   }
   if (h < 70) w.twinStack = 0;
-  const total = (w.squatT ?? 0) + (w.stepped ?? 0) + (w.staircase ?? 0) + (w.twinStack ?? 0);
+  const total = w.squatT + w.stepped + w.staircase + w.twinStack;
   if (total <= 0) return "stepped";
   let r = rng() * total;
-  if ((r -= w.squatT    ?? 0) < 0) return "squatT";
-  if ((r -= w.stepped   ?? 0) < 0) return "stepped";
-  if ((r -= w.staircase ?? 0) < 0) return "staircase";
+  if ((r -= w.squatT)  < 0) return "squatT";
+  if ((r -= w.stepped) < 0) return "stepped";
+  if (r < w.staircase)     return "staircase";
   return "twinStack";
 }
 
@@ -434,9 +435,9 @@ function layoutVolumes(building: BuildingRect, yBase: number, rng: RNG, opts: Bu
 
 type PushFn = (x: number, y: number, w: number, h: number) => void;
 
-function emitChamferRows(push: PushFn, tier: Tier): void {
-  const cs     = tier.chamfer!.size;
-  const corner = tier.chamfer!.corner;
+function emitChamferRows(push: PushFn, tier: TierWithChamfer): void {
+  const cs     = tier.chamfer.size;
+  const corner = tier.chamfer.corner;
   push(tier.x, tier.top + cs, tier.w, tier.h - cs);
   for (let row = 0; row < cs; row++) {
     const taper = cs - 1 - row;
@@ -458,7 +459,7 @@ function emitTierBody(
     else canvas.bodies.rect(x, y, w, h);
   };
   if (!tier.chamfer) { push(tier.x, tier.top, tier.w, tier.h); return; }
-  emitChamferRows(push, tier);
+  emitChamferRows(push, tier as TierWithChamfer);
 }
 
 function drawNeonTrim(

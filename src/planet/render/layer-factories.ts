@@ -1,6 +1,6 @@
 import { Container, FillGradient, Graphics } from "pixi.js";
 import {
-  mulberry32, hashSeed, randRange, randInt, chance,
+  mulberry32, hashSeed, randInt, chance,
   type RNG,
 } from "./rng";
 import {
@@ -8,7 +8,7 @@ import {
   drawBuilding, drawStreetLamps, drawBridge, drawDetailedGreebles, drawSimpleGreebles,
   FRONT_THEME, BACK_THEME,
   BuildingRegistry,
-  type Animator, type BuildingCanvas, type BuildingRect, type BuildingTheme, type BuildingOpts, type SliceContext, type Tier,
+  type Animator, type BuildingCanvas, type BuildingRect, type BuildingTheme, type SliceContext, type Tier,
 } from "./buildings";
 import type { SliceFactory } from "./slice-ring";
 
@@ -328,53 +328,6 @@ export function makeShallowCaveFactory(opts: FactoryOpts): SliceFactory {
   };
 }
 
-// Deep core: dense glowing magma pillars
-function makeDeepCoreFactory(opts: FactoryOpts): SliceFactory {
-  const {
-    sliceWidthPxAtZoom1,
-    baseColor = 0x2a0800,
-    density   = 1.0,
-    salt      = 505,
-    yBase     = 2200,
-  } = opts;
-
-  const glowColor = 0xff5500;
-
-  return (i) => {
-    const root = new Container();
-    const rng  = mulberry32(hashSeed(i, salt));
-
-    if (!chance(rng, density)) return root;
-
-    root.addChild(
-      new Graphics()
-        .rect(0, yBase - 120, sliceWidthPxAtZoom1, 120)
-        .fill({ color: baseColor, alpha: 1 }),
-    );
-
-    const lavaColor = darken(glowColor, randRange(rng, 0.0, 0.2));
-    root.addChild(
-      new Graphics().rect(0, yBase - 12, sliceWidthPxAtZoom1, 12).fill({ color: lavaColor, alpha: 1 }),
-    );
-
-    const pillarCount = randInt(rng, 1, 3);
-    for (let n = 0; n < pillarCount; n++) {
-      const w = randInt(rng, 10, 28);
-      const h = randInt(rng, 30, 100);
-      const x = randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w));
-      const c = darken(glowColor, randRange(rng, 0.1, 0.45));
-      root.addChild(new Graphics().rect(x, yBase - h, w, h).fill({ color: c, alpha: 1 }));
-      root.addChild(new Graphics().rect(x - 2, yBase - h, w + 4, h).fill({ color: glowColor, alpha: 0.12 }));
-    }
-
-    if (chance(rng, 0.5)) {
-      const hx = randInt(rng, 2, sliceWidthPxAtZoom1 - 2);
-      root.addChild(new Graphics().rect(hx, yBase - 14, 2, 4).fill({ color: 0xffcc44, alpha: 0.9 }));
-    }
-
-    return root;
-  };
-}
 
 const DEFAULT_SKY_GRADIENT: Array<{ offset: number; color: number }> = [
   { offset: 0,    color: 0x000005 },

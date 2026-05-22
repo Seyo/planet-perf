@@ -44,6 +44,11 @@ All new code must score **10.0** on CodeScene code health. Before marking any ta
 
 The existing Yellow files (`building-v2.ts` 7.33, `layer-factories.ts` 7.52, `shuttle-layer.ts` 8.51) are being improved incrementally via the `refactor/` plan — do not introduce new smells into them while working on other things.
 
+Before marking any task done, also run:
+
+- `npm run lint` — must pass with zero errors
+- `npm run knip` — must pass with zero findings (unused exports, dead files)
+
 ### Module Organisation
 
 Prefer folders with a barrel `index.ts` that re-exports the folder's public surface. New feature areas (e.g. a new actor type, a new building category) should live in their own subfolder with an `index.ts`, keeping internal helpers private to the folder.

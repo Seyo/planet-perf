@@ -26,7 +26,7 @@ export class PointerX {
       updateXY(e);
     });
 
-    canvas.addEventListener("pointermove", (e) => updateXY(e));
+    canvas.addEventListener("pointermove", (e) => { updateXY(e); });
 
     const up = (e: PointerEvent) => {
       updateXY(e);

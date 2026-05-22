@@ -1,6 +1,6 @@
 export type {
   BuildingCanvas, BuildingTheme, BuildingRect, BuildingOpts,
-  Animator, Tier, SliceContext,
+  Animator, Tier, SliceContext, Archetype,
 } from './core';
 export {
   FRONT_THEME, BACK_THEME,

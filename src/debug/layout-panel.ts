@@ -161,7 +161,7 @@ export class LayoutPanel {
       {
         id: 'single', label: 'Single district',
         build: () => [{ startSlice: singleState.startSlice, sliceCount: singleState.sliceCount, taperConfig: { ...singleState.taperConfig } }],
-        renderControls: (el, emit) => renderSingleControls(el, singleState, emit),
+        renderControls: (el, emit) => { renderSingleControls(el, singleState, emit); },
       },
       { id: 'ascending', label: 'Ascending 1-10', build: generateAscendingDistricts, renderControls: () => {} },
     ];
@@ -211,7 +211,7 @@ export class LayoutPanel {
         color: '#fff', border: '1px solid rgba(255,255,255,0.3)',
         background: 'rgba(255,255,255,0.05)',
       });
-      btn.addEventListener('click', () => this.activateLayout(layout.id));
+      btn.addEventListener('click', () => { this.activateLayout(layout.id); });
       this.tabBtns.set(layout.id, btn);
       row.appendChild(btn);
     }
@@ -219,7 +219,8 @@ export class LayoutPanel {
   }
 
   private activateLayout(id: string): void {
-    const layout = this.layouts.find(l => l.id === id)!;
+    const layout = this.layouts.find(l => l.id === id);
+    if (!layout) return;
     this.districts = layout.build();
     for (const [lid, btn] of this.tabBtns) {
       btn.style.background = lid === id ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)';

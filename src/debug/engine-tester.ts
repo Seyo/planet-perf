@@ -225,14 +225,14 @@ export class EngineTesterPanel {
       color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)',
       border: '1px solid rgba(255,255,255,0.2)',
     });
-    btn.addEventListener('click', () => this.resetToDefaults());
+    btn.addEventListener('click', () => { this.resetToDefaults(); });
     return btn;
   }
 
   private readValue(key: SliderKey): number {
     if (key === 'speedDeg') return this.config.speedDeg;
     if (key === 'cruiseY')  return this.config.cruiseY;
-    return this.config.engine[key as keyof EngineConfig] as number;
+    return this.config.engine[key as keyof EngineConfig];
   }
 
   private writeValue(key: SliderKey, v: number): void {
@@ -259,8 +259,8 @@ export class EngineTesterPanel {
       for (const spec of specs) {
         const v = this.readValue(spec.key);
         const d = decimalsForStep(spec.step);
-        this.valueEls.get(spec.key)!.textContent  = v.toFixed(d);
-        this.sliderEls.get(spec.key)!.value = String(v);
+        (this.valueEls.get(spec.key) as HTMLSpanElement).textContent  = v.toFixed(d);
+        (this.sliderEls.get(spec.key) as HTMLInputElement).value = String(v);
       }
     }
     this.warmPickerEl.value = numToHex(this.config.engine.warmColor);

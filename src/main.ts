@@ -107,7 +107,7 @@ const shuttleDebugToggle = { visible: false };
 
 // Individual back-city layers, far to near
 for (let i = 0; i < BACK_LAYER_COUNT; i++) {
-  const t           = BACK_LAYER_COUNT > 1 ? i / (BACK_LAYER_COUNT - 1) : 0;
+  const t           = i / (BACK_LAYER_COUNT - 1);
   const motionScale = BACK_SCALE_START + t * (BACK_SCALE_END - BACK_SCALE_START);
   const minH        = Math.round(40  + t * 80);
   const maxH        = Math.round(100 + t * 180);
@@ -133,7 +133,7 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
     planet.addActorLayer(actorLayer);
     const layerT = (i - ACTOR_LAYER_START) / (BACK_LAYER_COUNT - 1 - ACTOR_LAYER_START);
     boundsLayerInfos.push({
-      layerKey: layerKey!,
+      layerKey: layerKey as string,
       motionScale,
       yMotionScale: motionScale,
       color: lerpColor(0x882222, 0x22bb44, layerT),
@@ -287,9 +287,9 @@ testBlock.container.visible = false;
 planet.addActorLayer(testBlock);
 
 // Frontmost shuttle layer — its ppd/yMotionScale are the correct parallax basis.
-const frontShuttle = () => shuttleLayers[shuttleLayers.length - 1];
-explosionTester.onSpawn = (deg, y, cfg) => frontShuttle()?.spawnExplosionAt({ deg, y }, cfg);
-shuttleTester.onSpawn   = (deg, cfg) => frontShuttle()?.spawnShuttleAt(deg, cfg);
+const frontShuttle = (): ShuttleLayer | undefined => shuttleLayers[shuttleLayers.length - 1];
+explosionTester.onSpawn = (deg, y, cfg) => { frontShuttle()?.spawnExplosionAt({ deg, y }, cfg); };
+shuttleTester.onSpawn   = (deg, cfg) => { frontShuttle()?.spawnShuttleAt(deg, cfg); };
 shuttleTester.onClear   = ()         => { for (const sl of shuttleLayers) sl.clearShuttles(); };
 
 const updateCursor = () => {
@@ -309,14 +309,16 @@ app.canvas.addEventListener('click', (e) => {
   }
 
   if (!explosionTester.isVisible && !shuttleTester.isVisible) return;
-  const deg = planet.xDeg + (cx - app.renderer.width / 2) / (frontShuttle()!.layerPpd * zoom);
-  const y   = cy / zoom + planet.cameraY * frontShuttle()!.layerYMotionScale;
+  const shuttle = frontShuttle();
+  if (!shuttle) return;
+  const deg = planet.xDeg + (cx - app.renderer.width / 2) / (shuttle.layerPpd * zoom);
+  const y   = cy / zoom + planet.cameraY * shuttle.layerYMotionScale;
   if (explosionTester.isVisible) explosionTester.spawnAt(deg, y);
   if (shuttleTester.isVisible)   shuttleTester.spawnAt(deg, y);
 });
 
 layoutPanel.onLayoutChange = applyDistricts;
-debugPanel.onLayoutToggle  = () => layoutPanel.toggle();
+debugPanel.onLayoutToggle  = () => { layoutPanel.toggle(); };
 debugPanel.onAnnihilate = () => { for (const sl of shuttleLayers) sl.annihilate(); };
 debugPanel.onExplosionTesterToggle = () => { explosionTester.toggle(); updateCursor(); };
 debugPanel.onShuttleTesterToggle   = () => { shuttleTester.toggle();   updateCursor(); };
@@ -325,12 +327,12 @@ debugPanel.onEngineTesterToggle    = () => {
   testBlock.container.visible = engineTester.isVisible;
   if (!engineTester.isVisible) planet.setCameraLock(null);
 };
-engineTester.onBlockUpdate = (patch) => testBlock.updateConfig(patch);
+engineTester.onBlockUpdate = (patch) => { testBlock.updateConfig(patch); };
 engineTester.onCameraLock  = (locked) => {
   planet.setCameraLock(locked ? () => testBlock.positionDeg : null);
 };
 debugPanel.onPaletteChange  = (idx) => { applyPalette(PALETTES[idx]); userPanel.setPalette(idx); };
-debugPanel.onAutopanChange  = (speed) => planet.setAutoPan(speed);
+debugPanel.onAutopanChange  = (speed) => { planet.setAutoPan(speed); };
 function applyLightPalette(lp: LightPalette): void {
   setLightColors(lp.warmColor, lp.coolColor);
   for (const sl of shuttleLayers) sl.setLightColors({ warm: lp.warmColor, cool: lp.coolColor });
@@ -350,7 +352,7 @@ debugPanel.onThemeChange = (paletteIdx, lightPaletteIdx) => {
 userPanel.onPaletteChange  = (idx) => { applyPalette(PALETTES[idx]); debugPanel.setActivePalette(idx); };
 userPanel.onLightsChange   = (idx) => { applyLightPalette(LIGHT_PALETTES[idx]); debugPanel.setActiveLightPalette(idx); };
 userPanel.onAnnihilate     = () => { for (const sl of shuttleLayers) sl.annihilate(); };
-userPanel.onAutopanChange    = (speed) => planet.setAutoPan(speed);
+userPanel.onAutopanChange    = (speed) => { planet.setAutoPan(speed); };
 userPanel.onLayerRangeChange = setLayerRange;
 
 const params = new URLSearchParams(window.location.search);

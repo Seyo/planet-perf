@@ -189,9 +189,9 @@ export class UserPanel {
 
   private syncUrl(): void {
     const params = new URLSearchParams();
-    const palette = this.palettes[this.activePalette];
+    const palette = this.palettes.at(this.activePalette);
     if (palette) params.set('palette', palette.name);
-    const lights = this.lights[this.activeLights];
+    const lights = this.lights.at(this.activeLights);
     if (lights) params.set('lights', lights.name);
     if (this.autopanSpeed > 0) params.set('autopan', this.autopanSpeed.toFixed(2));
     if (new URLSearchParams(location.search).has('debug')) params.set('debug', '');
@@ -216,7 +216,7 @@ export class UserPanel {
     });
     btn.textContent = '◎';
     btn.title = 'Customise';
-    btn.addEventListener('click', () => this.togglePanel());
+    btn.addEventListener('click', () => { this.togglePanel(); });
     return btn;
   }
 
@@ -271,7 +271,7 @@ export class UserPanel {
     const grid = this.buildSwatchGrid();
     for (const [i, item] of items.entries()) {
       const el = makeEl(item);
-      el.addEventListener('click', () => onClick(i, item, el));
+      el.addEventListener('click', () => { onClick(i, item, el); });
       swatches.push(el);
       grid.appendChild(el);
     }
@@ -379,7 +379,7 @@ export class UserPanel {
 
     const back  = this.makeDualRangeInput(this.layerBack);
     const front = this.makeDualRangeInput(this.layerFront);
-    const sync  = () => this.syncLayerFill(back, front);
+    const sync  = () => { this.syncLayerFill(back, front); };
 
     back.addEventListener('input', () => {
       this.layerBack = Math.min(parseInt(back.value), this.layerFront);

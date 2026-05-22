@@ -2,8 +2,6 @@ import type { Application } from "pixi.js";
 import { Container, FillGradient, Graphics } from "pixi.js";
 import { PointerX } from "./input/pointer-x";
 import { WheelZoom } from "./input/wheel-zoom";
-import { ActorLayer } from "./render/actor-layer";
-
 export interface ActorLike {
   container: Container;
   update(dt: number): void;
@@ -13,7 +11,7 @@ import { SliceLayer } from "./render/slice-layer";
 import { SliceRing } from "./render/slice-ring";
 import type { SliceFactory } from "./render/slice-ring";
 import { makeBackCityFactory, makeBackEmptySliceFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
-import { sliceTaperParams, proportionalTaperParams, type TaperConfig, type District } from "./render/district-taper";
+import { sliceTaperParams, proportionalTaperParams, type District } from "./render/district-taper";
 export type { TaperConfig, District } from "./render/district-taper";
 export { districtMass } from "./render/district-taper";
 import type { Animator } from "./render/layer-factories";
@@ -26,7 +24,6 @@ export type WorldState = {
   vY: number;      // px per tick
 };
 
-const INERTIA_ENABLED = true;
 const INERTIA_FRICTION = 0.95;
 
 const HAZE_COLOR = 0x7a6090;
@@ -49,12 +46,12 @@ export class Planet {
   private dragStartPointerY = 0;
   private dragStartCameraY = 0;
   private prevPointerX: number | null = null;
-  private prevPointerY: number | null = null;
+  private prevPointerY = 0;
 
   private layers: SliceLayer[] = [];
   private actorLayers: ActorLike[] = [];
   private overlays: Array<{ container: Container; yMotionScale: number }> = [];
-  private interactionLayer!: SliceLayer;
+  private interactionLayer: SliceLayer | undefined;
 
   private autoPanDegPerTick = 0;
   private cameraLockTarget: (() => number) | null = null;
@@ -163,6 +160,7 @@ export class Planet {
 
   // Cursor-locked drag uses the interaction layer’s effective mapping
   private get degreesPerPixel(): number {
+    if (!this.interactionLayer) throw new Error("Planet not finalized");
     const ppdEffective = this.interactionLayer.ring.basePPD * this.zoom.zoom; // motionScale is NOT included for drag feel
     return 1 / ppdEffective;
   }
@@ -184,17 +182,15 @@ export class Planet {
     const deltaPy = this.pointer.y - this.dragStartPointerY;
     this.world.cameraY = this.clampCameraY(this.dragStartCameraY - deltaPy / this.zoom.zoom);
 
-    if (INERTIA_ENABLED) {
-      this.world.vDeg = (this.pointer.x - this.prevPointerX) * this.degreesPerPixel;
-      this.world.vY = (this.pointer.y - this.prevPointerY!) / this.zoom.zoom;
-    }
+    this.world.vDeg = (this.pointer.x - this.prevPointerX) * this.degreesPerPixel;
+    this.world.vY = (this.pointer.y - this.prevPointerY) / this.zoom.zoom;
     this.prevPointerX = this.pointer.x;
     this.prevPointerY = this.pointer.y;
   }
 
   private applyFreeMotion(dt: number): void {
     this.prevPointerX = null;
-    this.prevPointerY = null;
+    this.prevPointerY = 0;
 
     if (this.cameraLockTarget) {
       this.world.xDeg = this.cameraLockTarget();
@@ -202,18 +198,16 @@ export class Planet {
     } else if (this.autoPanDegPerTick !== 0) {
       this.world.xDeg += this.autoPanDegPerTick * dt;
       this.world.vDeg = 0;
-    } else if (INERTIA_ENABLED) {
+    } else {
       this.world.vDeg *= INERTIA_FRICTION;
       this.world.xDeg = this.world.xDeg - this.world.vDeg * dt;
     }
 
-    if (INERTIA_ENABLED) {
-      this.world.vY *= INERTIA_FRICTION;
-      const rawY = this.world.cameraY - this.world.vY * dt;
-      const clampedY = this.clampCameraY(rawY);
-      if (clampedY !== rawY) this.world.vY = 0;
-      this.world.cameraY = clampedY;
-    }
+    this.world.vY *= INERTIA_FRICTION;
+    const rawY = this.world.cameraY - this.world.vY * dt;
+    const clampedY = this.clampCameraY(rawY);
+    if (clampedY !== rawY) this.world.vY = 0;
+    this.world.cameraY = clampedY;
   }
 
   private stepWorld(dt: number) {
@@ -297,7 +291,7 @@ export class Planet {
 
   private installResize() {
     window.addEventListener("resize", () => {
-      requestAnimationFrame(() => this.recomputeZoomAndCenter());
+      requestAnimationFrame(() => { this.recomputeZoomAndCenter(); });
     });
   }
 }
