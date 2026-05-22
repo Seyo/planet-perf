@@ -145,7 +145,7 @@ for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
   bakedLayers.push(backLayer);
   planet.addLayer(backLayer, { behindAll: true });
   if (i >= ACTOR_LAYER_START) {
-    planet.addActorLayer(makeActorLayer(motionScale, motionScale));
+    planet.addActorLayer(makeActorLayer(motionScale, motionScale, ACTOR_DISTRICTS));
   }
   if (i >= ACTOR_LAYER_START && i < BACK_LAYER_COUNT - 5) {
     const sl = makeShuttleLayer({ motionScale, yMotionScale: motionScale, label: String(i), districts: ACTOR_DISTRICTS }, shuttleDebugToggle);
@@ -166,7 +166,7 @@ planet.addOverlay(ugHazeContainer, 1.0);
 planet.addLayer(makeGroundLayer(), { behindAll: true });
 let activeFrontLayer = makeTaperedFrontLayer(getDistricts(), planet.animators);
 planet.addLayer(activeFrontLayer, { asInteractionLayer: true });
-planet.addActorLayer(makeActorLayer(1.0, 1.0));
+planet.addActorLayer(makeActorLayer(1.0, 1.0, ACTOR_DISTRICTS));
 
 const frontHazeContainer = makeHazeOverlay({ alpha: 0.25, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
 hazeEntries.push({ container: frontHazeContainer, alpha: 0.25, underground: false });

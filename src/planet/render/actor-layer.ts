@@ -9,9 +9,14 @@ const GROUND_BOTTOM_Y =   62; // bottom of dirt — matches bottomY in makeGroun
 const ABOVE_FRACTION  = 0.70; // 70% of cars above ground
 const DEST_DEG_SPREAD = 25; // max ±deg for next destination
 const ARRIVAL_THRESHOLD = 3; // px world-space
+const DEGS_PER_SLICE  = 5;
+const CARS_PER_SLICE_MIN = 2;
+const CARS_PER_SLICE_MAX = 4;
 
 // Headlight colors: warm white → amber → orange
 const HEADLIGHT_COLORS = [0xfffde0, 0xfff0a0, 0xffd060, 0xffa040, 0xff8820];
+
+export type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
 
 function makeCar(halfLen: number, headColor: number): Container {
   const c = new Container();
@@ -24,6 +29,11 @@ function makeCar(halfLen: number, headColor: number): Container {
   return c;
 }
 
+function spawnDeg(district: DistrictRange | null): number {
+  if (!district) return Math.random() * 360;
+  return district.startDeg + Math.random() * (district.endDeg - district.startDeg);
+}
+
 class Car {
   deg: number;
   y: number;
@@ -34,40 +44,46 @@ class Car {
   readonly gfx: Container;
   readonly zone: 'above' | 'below';
   private speed: number;
-  private dirSign = 1; // +1 = rightward (increasing deg), -1 = leftward
+  private dirSign = 1;
+  private readonly district: DistrictRange | null;
   onScreen = false;    // set each frame by ActorLayer.layout()
 
-  constructor() {
-    this.zone    = Math.random() < ABOVE_FRACTION ? 'above' : 'below';
+  constructor(district: DistrictRange | null = null) {
+    this.district = district;
+    this.zone     = Math.random() < ABOVE_FRACTION ? 'above' : 'below';
     const [yMin, yMax] = this.zone === 'above'
       ? [Y_SKY_MIN, SURFACE_Y]
       : [GROUND_BOTTOM_Y, Y_UG_MAX];
-    this.deg     = Math.random() * 360;
+    this.deg     = spawnDeg(district);
     this.y       = yMin + Math.random() * (yMax - yMin);
     this.destDeg = this.deg;
     this.destY   = this.y;
     this.speed   = 0.25 + Math.random() * 0.35;
-    // half-length: cars 2–4px, buses/trucks up to 6px
     const halfLen   = 2 + Math.random() ** 2 * 4;
     const headColor = HEADLIGHT_COLORS[Math.floor(Math.random() * HEADLIGHT_COLORS.length)];
-    this.gfx     = makeCar(halfLen, headColor);
+    this.gfx        = makeCar(halfLen, headColor);
     this.pickNewDest();
   }
 
-  private pickNewDest() {
-    // Only allow horizontal reversal when off-screen
-    let spread = (Math.random() * 2 - 1) * DEST_DEG_SPREAD;
-    const wouldReverse = this.onScreen && spread !== 0 && Math.sign(spread) !== this.dirSign;
-    if (wouldReverse) spread = -spread;
-    this.destDeg = ((this.deg + spread) % 360 + 360) % 360;
+  private clampDeg(raw: number): number {
+    if (!this.district) return ((raw % 360) + 360) % 360;
+    return Math.max(this.district.startDeg, Math.min(this.district.endDeg, raw));
+  }
 
-    // Vertical drift clamped to zone — never enter dirt
+  private globalDestDeg(spread: number): number {
+    const s = this.onScreen && spread !== 0 && Math.sign(spread) !== this.dirSign ? -spread : spread;
+    return ((this.deg + s) % 360 + 360) % 360;
+  }
+
+  private pickNewDest() {
+    const rawSpread = (Math.random() * 2 - 1) * DEST_DEG_SPREAD;
+    this.destDeg = this.district
+      ? this.clampDeg(this.deg + rawSpread)
+      : this.globalDestDeg(rawSpread);
     const [yMin, yMax] = this.zone === 'above'
       ? [Y_SKY_MIN, SURFACE_Y]
       : [GROUND_BOTTOM_Y, Y_UG_MAX];
-    const yDrift = (Math.random() * 2 - 1) * 40;
-    this.destY   = Math.max(yMin, Math.min(yMax, this.y + yDrift));
-
+    this.destY = Math.max(yMin, Math.min(yMax, this.y + (Math.random() * 2 - 1) * 40));
     this.recomputeVelocity();
   }
 
@@ -83,14 +99,13 @@ class Car {
   }
 
   update(dt: number) {
-    this.deg = ((this.deg + this.vDeg * dt) % 360 + 360) % 360;
+    this.deg = this.clampDeg(this.deg + this.vDeg * dt);
     this.y  += this.vY * dt;
 
     const dxDeg = normalize180(this.destDeg - this.deg);
     const dxPx  = dxDeg * BASE_PPD;
     const dyPx  = this.destY - this.y;
-    const dist  = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
-    if (dist < ARRIVAL_THRESHOLD) this.pickNewDest();
+    if (Math.sqrt(dxPx * dxPx + dyPx * dyPx) < ARRIVAL_THRESHOLD) this.pickNewDest();
 
     // Orient car to face direction of travel
     this.gfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
@@ -105,10 +120,10 @@ export class ActorLayer {
   constructor(
     private readonly motionScale: number,
     private readonly yMotionScale: number,
-    carCount: number,
+    cars: Car[],
   ) {
     this.ppd  = BASE_PPD * motionScale;
-    this.cars = Array.from({ length: carCount }, () => new Car());
+    this.cars = cars;
     for (const car of this.cars) this.container.addChild(car.gfx);
   }
 
@@ -132,7 +147,21 @@ export class ActorLayer {
   }
 }
 
-export function makeActorLayer(motionScale: number, yMotionScale: number): ActorLayer {
-  const carCount = 100 + Math.floor(Math.random() * 101); // 50–100
-  return new ActorLayer(motionScale, yMotionScale, carCount);
+function makeCarsForDistricts(districts: readonly DistrictRange[]): Car[] {
+  return districts.flatMap(d => {
+    const sliceCount = Math.max(1, Math.round((d.endDeg - d.startDeg) / DEGS_PER_SLICE));
+    const carsPerSlice = CARS_PER_SLICE_MIN + Math.floor(Math.random() * (CARS_PER_SLICE_MAX - CARS_PER_SLICE_MIN + 1));
+    return Array.from({ length: sliceCount * carsPerSlice }, () => new Car(d));
+  });
+}
+
+export function makeActorLayer(
+  motionScale: number,
+  yMotionScale: number,
+  districts?: readonly DistrictRange[],
+): ActorLayer {
+  const cars = districts && districts.length > 0
+    ? makeCarsForDistricts(districts)
+    : Array.from({ length: 50 + Math.floor(Math.random() * 51) }, () => new Car(null));
+  return new ActorLayer(motionScale, yMotionScale, cars);
 }
