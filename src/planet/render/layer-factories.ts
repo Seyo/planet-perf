@@ -6,7 +6,6 @@ import {
 import {
   makeCanvas, commitCanvas, registerFlickerAnimators,
   drawBuilding, drawStreetLamps, drawBridge, drawDetailedGreebles, drawSimpleGreebles,
-  drawUndergroundCity,
   FRONT_THEME, BACK_THEME,
   type Animator, type BuildingRect, type BuildingTheme, type BuildingOpts, type SliceContext,
 } from "./buildings";
@@ -30,6 +29,14 @@ export function darken(color: number, amount: number): number {
   return (rr << 16) | (gg << 8) | bb;
 }
 
+// Shared ground cross-section boundaries and colours — referenced by both
+// the back city fill and the front ground section so all layers stay in sync.
+const GROUND_SURFACE_Y   =  -2;
+const GROUND_STONE_Y     =  50;
+const GROUND_BOTTOM_Y    =  62;
+const GROUND_PATH_COLOR  = 0x060810;
+const GROUND_STONE_COLOR = 0x1a1a22;
+
 type FactoryOpts = {
   sliceWidthPxAtZoom1: number;
   baseColor?: number;
@@ -38,8 +45,6 @@ type FactoryOpts = {
   yBase?: number;
   minH?: number;
   maxH?: number;
-  underground?: boolean;
-  undergroundDim?: number;
   skyGradient?: Array<{ offset: number; color: number }>;
 };
 
@@ -167,14 +172,12 @@ function buildBackTowers(ctx: BackCityCtx, count: number, minH: number, maxH: nu
 export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
   const {
     sliceWidthPxAtZoom1,
-    baseColor      = 0x060810,
-    density        = 0.65,
-    salt           = 202,
-    yBase          = 0,
-    minH           = 40,
-    maxH           = 280,
-    underground    = false,
-    undergroundDim = 0,
+    baseColor = 0x060810,
+    density   = 0.65,
+    salt      = 202,
+    yBase     = 0,
+    minH      = 40,
+    maxH      = 280,
   } = opts;
 
   return (i) => {
@@ -198,13 +201,8 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
     drawSimpleGreebles(backCtx, randInt(rng, 8, 14));
     commitCanvas(root, sliceCanvas, theme);
 
-    if (underground) {
-      const ugRng = mulberry32(hashSeed(i, salt + 99999));
-      drawUndergroundCity(root, ugRng, built, { yBase, dim: undergroundDim });
-    }
-    root.addChild(
-      new Graphics().rect(0, yBase, sliceWidthPxAtZoom1, 75).fill({ color: baseColor }),
-    );
+    root.addChild(new Graphics().rect(0, yBase + GROUND_SURFACE_Y, sliceWidthPxAtZoom1, GROUND_STONE_Y - GROUND_SURFACE_Y).fill({ color: GROUND_PATH_COLOR }));
+    root.addChild(new Graphics().rect(0, yBase + GROUND_STONE_Y,   sliceWidthPxAtZoom1, GROUND_BOTTOM_Y - GROUND_STONE_Y  ).fill({ color: GROUND_STONE_COLOR }));
 
     return root;
   };
@@ -214,26 +212,21 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
 export function makeGroundSectionFactory(opts: FactoryOpts): SliceFactory {
   const { sliceWidthPxAtZoom1, salt = 606 } = opts;
 
-  const surfaceY  =  -2;
   const soilY     =  13;
   const subsoilY  =  32;
-  const stoneY    =  50;
-  const bottomY   = 100;
 
-  const pathColor    = 0x060810;
   const soilColor    = 0x2a1e0e;
   const subsoilColor = 0x1e1610;
-  const stoneColor   = 0x1a1a22;
 
   return (i) => {
     const root = new Container();
     const rng  = mulberry32(hashSeed(i, salt));
     const w    = sliceWidthPxAtZoom1;
 
-    root.addChild(new Graphics().rect(0, surfaceY, w, soilY    - surfaceY).fill({ color: pathColor }));
-    root.addChild(new Graphics().rect(0, soilY,    w, subsoilY - soilY   ).fill({ color: soilColor }));
-    root.addChild(new Graphics().rect(0, subsoilY, w, stoneY   - subsoilY).fill({ color: subsoilColor }));
-    root.addChild(new Graphics().rect(0, stoneY,   w, bottomY  - stoneY  ).fill({ color: stoneColor }));
+    root.addChild(new Graphics().rect(0, GROUND_SURFACE_Y, w, soilY            - GROUND_SURFACE_Y).fill({ color: GROUND_PATH_COLOR }));
+    root.addChild(new Graphics().rect(0, soilY,            w, subsoilY - soilY               ).fill({ color: soilColor }));
+    root.addChild(new Graphics().rect(0, subsoilY,         w, GROUND_STONE_Y   - subsoilY    ).fill({ color: subsoilColor }));
+    root.addChild(new Graphics().rect(0, GROUND_STONE_Y,   w, GROUND_BOTTOM_Y  - GROUND_STONE_Y).fill({ color: GROUND_STONE_COLOR }));
 
     const rockCount = randInt(rng, 1, 4);
     for (let n = 0; n < rockCount; n++) {

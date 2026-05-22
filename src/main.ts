@@ -6,7 +6,6 @@ import {
   makeTaperedFrontLayer,
   makeGroundLayer,
   makeHazeOverlay,
-  makeUndergroundHazeOverlay,
   makeShallowCaveLayer,
   makeSkyLayer,
   HAZE_TOP_Y,
@@ -61,8 +60,8 @@ const planet = new Planet(app);
 
 // Back-to-front: first added = furthest back
 let activeSkyLayer: SliceLayer = makeSkyLayer(PALETTES[DEFAULT_PALETTE_IDX].skyGradient);
-planet.addLayer(activeSkyLayer,          { behindAll: true });
-planet.addLayer(makeShallowCaveLayer(),  { behindAll: true });
+planet.addLayer(activeSkyLayer,         { behindAll: true });
+planet.addLayer(makeShallowCaveLayer(), { behindAll: true });
 
 // Background city layers — far to near, uniform motionScale steps including the front layer at 1.0
 const BACK_LAYER_COUNT  = 25;
@@ -72,7 +71,7 @@ const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 
 // Far-background grouping: FAR_GROUP_COUNT groups of FAR_GROUP_SIZE original layers each.
 // Layers within a group share one motionScale and are composited into one baked layer.
-// Constraint: FAR_GROUP_COUNT * FAR_GROUP_SIZE <= BACK_LAYER_COUNT - 10 (underground boundary).
+// Constraint: FAR_GROUP_COUNT * FAR_GROUP_SIZE <= BACK_LAYER_COUNT.
 const FAR_GROUP_COUNT     = 3;
 const FAR_GROUP_SIZE      = 3;
 const FAR_HAZE_BOOST      = 0.15; // extra haze opacity for grouped far layers
@@ -94,7 +93,7 @@ const ACTOR_DISTRICTS = getDistricts().map(d => ({
   endDeg:   (d.startSlice + d.sliceCount) * DEGS_PER_SLICE,
 }));
 
-type HazeEntry  = { container: Container; alpha: number; underground: boolean };
+type HazeEntry  = { container: Container; alpha: number };
 type BackEntry  = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer };
 const hazeEntries: HazeEntry[] = [];
 const bakedLayers: SliceLayer[] = [];
@@ -121,7 +120,7 @@ for (let g = 0; g < FAR_GROUP_COUNT; g++) {
   const midMotionScale = BACK_SCALE_START + midT * (BACK_SCALE_END - BACK_SCALE_START);
   const hazeAlpha = 0.30 - midT * 0.24 + FAR_HAZE_BOOST;
   const hazeContainer = makeHazeOverlay({ alpha: hazeAlpha, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
-  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha, underground: false });
+  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha });
   planet.addOverlay(hazeContainer, midMotionScale);
 }
 
@@ -133,10 +132,8 @@ for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
   const maxH        = Math.round(100 + t * 180);
   const salt        = 1000 + i * 97;
 
-  const isUnderground = i >= BACK_LAYER_COUNT - 10;
-  const ugT = isUnderground ? (i - (BACK_LAYER_COUNT - 10)) / 9 : 0;
   const bakeResolution = i >= BACK_LAYER_COUNT - 5 ? 2 : 1;
-  const layerCfg = { motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: isUnderground, undergroundDim: isUnderground ? 0.5 * (1 - ugT) : 0, bakeResolution };
+  const layerCfg = { motionScale, yMotionScale: motionScale, minH, maxH, salt, bakeResolution };
   const rebuild = (districts: District[]) => makeBackCityLayer(layerCfg, districts);
   const backLayer = rebuild(getDistricts());
   backEntries.push({ layer: backLayer, rebuild });
@@ -153,13 +150,9 @@ for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
 
   const hazeAlpha = 0.30 - t * 0.24;
   const hazeContainer = makeHazeOverlay({ alpha: hazeAlpha, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
-  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha, underground: false });
+  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha });
   planet.addOverlay(hazeContainer, motionScale);
 }
-
-const ugHazeContainer = makeUndergroundHazeOverlay(0.45, PALETTES[DEFAULT_PALETTE_IDX].caveHazeColor);
-hazeEntries.push({ container: ugHazeContainer, alpha: 0.45, underground: true });
-planet.addOverlay(ugHazeContainer, 1.0);
 
 planet.addLayer(makeGroundLayer(), { behindAll: true });
 let activeFrontLayer = makeTaperedFrontLayer(getDistricts(), planet.animators);
@@ -167,7 +160,7 @@ planet.addLayer(activeFrontLayer, { asInteractionLayer: true });
 planet.addActorLayer(makeActorLayer(1.0, 1.0, ACTOR_DISTRICTS));
 
 const frontHazeContainer = makeHazeOverlay({ alpha: 0.25, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
-hazeEntries.push({ container: frontHazeContainer, alpha: 0.25, underground: false });
+hazeEntries.push({ container: frontHazeContainer, alpha: 0.25 });
 planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();
@@ -232,11 +225,7 @@ function applyPalette(p: Palette): void {
   activeSkyLayer.container.addChild(skyBottomLine);
 
   for (const entry of hazeEntries) {
-    if (entry.underground) {
-      makeUndergroundHazeOverlay(entry.alpha, p.caveHazeColor, entry.container);
-    } else {
-      makeHazeOverlay({ alpha: entry.alpha, color: p.hazeColor, topY: HAZE_TOP_Y, bottomY: 10, into: entry.container });
-    }
+    makeHazeOverlay({ alpha: entry.alpha, color: p.hazeColor, topY: HAZE_TOP_Y, bottomY: 10, into: entry.container });
   }
 }
 

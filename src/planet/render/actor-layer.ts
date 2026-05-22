@@ -3,10 +3,7 @@ import { normalize180 } from "../math";
 
 const BASE_PPD = 24; // 120px / 5deg — matches all building rings
 const Y_SKY_MIN       = -200;
-const Y_UG_MAX        =  230;
 const SURFACE_Y       =   -2; // top of dirt — matches surfaceY in makeGroundSectionFactory
-const GROUND_BOTTOM_Y =   62; // bottom of dirt — matches bottomY in makeGroundSectionFactory
-const ABOVE_FRACTION  = 0.70; // 70% of cars above ground
 const DEST_DEG_SPREAD = 25; // max ±deg for next destination
 const ARRIVAL_THRESHOLD = 3; // px world-space
 const DEGS_PER_SLICE  = 5;
@@ -42,7 +39,6 @@ class Car {
   destDeg: number;
   destY: number;
   readonly gfx: Container;
-  readonly zone: 'above' | 'below';
   private speed: number;
   private dirSign = 1;
   private readonly district: DistrictRange | null;
@@ -50,12 +46,8 @@ class Car {
 
   constructor(district: DistrictRange | null = null) {
     this.district = district;
-    this.zone     = Math.random() < ABOVE_FRACTION ? 'above' : 'below';
-    const [yMin, yMax] = this.zone === 'above'
-      ? [Y_SKY_MIN, SURFACE_Y]
-      : [GROUND_BOTTOM_Y, Y_UG_MAX];
     this.deg     = spawnDeg(district);
-    this.y       = yMin + Math.random() * (yMax - yMin);
+    this.y       = Y_SKY_MIN + Math.random() * (SURFACE_Y - Y_SKY_MIN);
     this.destDeg = this.deg;
     this.destY   = this.y;
     this.speed   = 0.25 + Math.random() * 0.35;
@@ -80,10 +72,7 @@ class Car {
     this.destDeg = this.district
       ? this.clampDeg(this.deg + rawSpread)
       : this.globalDestDeg(rawSpread);
-    const [yMin, yMax] = this.zone === 'above'
-      ? [Y_SKY_MIN, SURFACE_Y]
-      : [GROUND_BOTTOM_Y, Y_UG_MAX];
-    this.destY = Math.max(yMin, Math.min(yMax, this.y + (Math.random() * 2 - 1) * 40));
+    this.destY = Math.max(Y_SKY_MIN, Math.min(SURFACE_Y, this.y + (Math.random() * 2 - 1) * 40));
     this.recomputeVelocity();
   }
 
