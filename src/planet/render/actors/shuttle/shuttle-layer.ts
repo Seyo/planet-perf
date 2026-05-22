@@ -7,6 +7,24 @@ const BASE_PPD = 24;
 const SURFACE_Y = -2;
 const FIZZLE_FADE_FRAMES = 20;
 const LAYOUT_CULL_PAD = 400;
+const DESCENT_PD_GAIN         = 0.008;
+const CRUISE_FULL_SPEED_DEG   = 120;  // journey length (°) at which full maxSpeed is reached
+const SAFE_LANDING_ACCEL_FRAMES = 10; // vDeg must be < maxTurnAccel × this to land safely
+
+function estimateDescentDeg(config: FlightConfig, cruiseY: number, speed: number): number {
+  const h = SURFACE_Y - cruiseY;
+  let y = cruiseY, vY = 0, vDeg = speed, dist = 0;
+  for (let i = 0; i < 2000; i++) {
+    const targetVY = clamp((SURFACE_Y - y) * DESCENT_PD_GAIN, -config.maxClimbRate, config.maxDescentRate);
+    vY += clamp(targetVY - vY, -config.maxVertAccel, config.maxVertAccel);
+    y  += vY;
+    if (y >= SURFACE_Y - config.landThreshold) break;
+    const af = clamp((y - cruiseY) / h, 0, 1);
+    vDeg += clamp(speed * (1 - af * af) - vDeg, -config.maxTurnAccel, config.maxTurnAccel);
+    dist += vDeg;
+  }
+  return dist;
+}
 
 export type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
 type CruisePicker = (deg: number) => { dirSign: number; cruiseDegLimit: number } | null;
@@ -16,6 +34,11 @@ function pickFromDistrict(districts: readonly DistrictRange[], depIdx: number): 
   return candidates.length > 0
     ? candidates[Math.floor(Math.random() * candidates.length)]
     : districts[Math.floor(Math.random() * districts.length)];
+}
+
+function pickDegInDistricts(districts: readonly DistrictRange[]): number {
+  const d = districts[Math.floor(Math.random() * districts.length)];
+  return d.startDeg + Math.random() * (d.endDeg - d.startDeg);
 }
 
 function makeCruisePicker(districts: readonly DistrictRange[]): CruisePicker | undefined {
@@ -312,6 +335,7 @@ class Shuttle {
   private waitTicks      = 0;
   private dirSign        = 1;
   private cruiseY        = -250;
+  private cruiseSpeed    = 0;
   private cruiseDegLimit = 80;
   private traveledDeg    = 0;
   private willExplode      = false;
@@ -321,14 +345,16 @@ class Shuttle {
   public pendingExplosion: ExplosionOrigin | null = null;
   private readonly halfLen: number;
   private readonly pickTarget: CruisePicker | undefined;
+  private readonly respawnDeg: (() => number) | undefined;
 
   get isFlying(): boolean {
     return this.phase !== 'grounded' && this.phase !== 'dying';
   }
 
-  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, init?: { startDeg?: number; pickTarget?: CruisePicker }) {
+  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, init?: { startDeg?: number; pickTarget?: CruisePicker; respawnDeg?: () => number }) {
     this.config      = config;
     this.pickTarget  = init?.pickTarget;
+    this.respawnDeg  = init?.respawnDeg;
     this.deg         = init?.startDeg ?? Math.random() * 360;
     this.halfLen   = config.bodyHalfLenMin
       + Math.random() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
@@ -381,20 +407,24 @@ class Shuttle {
   }
 
   private launch() {
+    this.cruiseY = this.config.cruiseYMin
+      + Math.random() * (this.config.cruiseYMax - this.config.cruiseYMin);
     const target = this.pickTarget?.(this.deg) ?? null;
+    let fullDeg: number;
     if (target !== null) {
-      this.dirSign        = target.dirSign;
-      this.cruiseDegLimit = target.cruiseDegLimit;
+      this.dirSign = target.dirSign;
+      fullDeg      = target.cruiseDegLimit;
     } else {
-      this.dirSign        = Math.random() < 0.5 ? 1 : -1;
-      this.cruiseDegLimit = this.config.cruiseDegMin
+      this.dirSign = Math.random() < 0.5 ? 1 : -1;
+      fullDeg      = this.config.cruiseDegMin
         + Math.random() * (this.config.cruiseDegMax - this.config.cruiseDegMin);
     }
-    this.cruiseY     = this.config.cruiseYMin
-      + Math.random() * (this.config.cruiseYMax - this.config.cruiseYMin);
-    this.traveledDeg = 0;
-    this.willExplode = Math.random() < this.config.explodeChance;
-    this.phase       = 'ascending';
+    this.cruiseSpeed    = this.maxSpeed * Math.min(1, fullDeg / CRUISE_FULL_SPEED_DEG);
+    const brakeDeg      = estimateDescentDeg(this.config, this.cruiseY, this.cruiseSpeed);
+    this.cruiseDegLimit = target !== null ? Math.max(0, fullDeg - brakeDeg) : fullDeg;
+    this.traveledDeg    = 0;
+    this.willExplode    = Math.random() < this.config.explodeChance;
+    this.phase          = 'ascending';
   }
 
   triggerExplosion() {
@@ -431,23 +461,23 @@ class Shuttle {
   private updateDying(tick: Tick): void {
     this.dyingTrailLen -= tick.dt;
     if (this.dyingTrailLen <= 0) {
-      this.deg = Math.random() * 360; // teleport before landing so remnant is off-screen
+      this.deg = this.respawnDeg ? this.respawnDeg() : Math.random() * 360; // teleport off-screen before waiting
       this.startWait();
     }
   }
 
   private vertControlParams(): { targetY: number; pdGain: number } {
     const targetY = this.phase === 'descending' ? SURFACE_Y : this.cruiseY;
-    const pdGain  = this.phase === 'descending' ? 0.008 : 0.12;
+    const pdGain  = this.phase === 'descending' ? DESCENT_PD_GAIN : 0.12;
     return { targetY, pdGain };
   }
 
   private horizTargetSpeed(): number {
     if (this.phase === 'ascending') return this.maxSpeed * 0.35; // slow climb — fighting gravity
-    if (this.phase === 'cruising')  return this.maxSpeed;
+    if (this.phase === 'cruising')  return this.cruiseSpeed;
     // Quadratic decel: maintains speed through most of descent, brakes hard near ground.
     const af = clamp((this.y - this.cruiseY) / (SURFACE_Y - this.cruiseY), 0, 1);
-    return this.maxSpeed * (1 - af * af);
+    return this.cruiseSpeed * (1 - af * af);
   }
 
   private applyPhysics(tick: Tick): void {
@@ -490,6 +520,14 @@ class Shuttle {
       && this.flyingFrames >= this.config.explodeAfterFrames;
   }
 
+  private tryLand(): void {
+    if (Math.abs(this.vDeg) > this.config.maxTurnAccel * SAFE_LANDING_ACCEL_FRAMES) {
+      this.triggerExplosion();
+    } else {
+      this.startWait();
+    }
+  }
+
   private updateFlying(tick: Tick): void {
     this.flyingFrames += tick.dt;
     if (this.checkExplodeAfterFrames()) { this.triggerExplosion(); return; }
@@ -501,7 +539,7 @@ class Shuttle {
     }
     if (this.phase === 'cruising' && this.checkCruisingPhase(tick)) return;
     if (this.phase === 'descending' && this.y >= SURFACE_Y - this.config.landThreshold) {
-      this.startWait();
+      this.tryLand();
       return;
     }
 
@@ -564,7 +602,11 @@ export class ShuttleLayer {
     this.debugToggle  = debugToggle;
     this.ppd          = BASE_PPD * init.motionScale;
     const picker      = init.districts ? makeCruisePicker(init.districts) : undefined;
-    this.shuttles     = Array.from({ length: init.count }, () => new Shuttle(this.colors, init.label, DEFAULT_FLIGHT_CONFIG, { pickTarget: picker }));
+    const respawnDeg  = init.districts ? () => pickDegInDistricts(init.districts!) : undefined;
+    this.shuttles     = Array.from({ length: init.count }, () => {
+      const startDeg = init.districts ? pickDegInDistricts(init.districts) : undefined;
+      return new Shuttle(this.colors, init.label, DEFAULT_FLIGHT_CONFIG, { startDeg, pickTarget: picker, respawnDeg });
+    });
     for (const s of this.shuttles) this.container.addChild(s.gfx);
   }
 
