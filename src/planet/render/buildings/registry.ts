@@ -1,9 +1,29 @@
 export type BuildingBounds = {
-  xLeft: number;    // px from slice left edge (0..sliceWidth)
+  xLeft: number;
   xRight: number;
-  yTop: number;     // top of building (yBase - h, negative for above-ground)
-  yBottom: number;  // yBase (typically 0)
+  yTop: number;
+  yBottom: number;
+  chamfer?: { corner: "tl" | "tr" | "both"; size: number };
 };
+
+function inRect(b: BuildingBounds, x: number, y: number): boolean {
+  return x >= b.xLeft && x <= b.xRight && y >= b.yTop && y <= b.yBottom;
+}
+
+function chamferHit(b: BuildingBounds, x: number, y: number): boolean {
+  const rowFromTop = Math.floor(y - b.yTop);
+  if (rowFromTop >= b.chamfer!.size) return true;
+  const taper    = b.chamfer!.size - 1 - rowFromTop;
+  const corner   = b.chamfer!.corner;
+  const effLeft  = b.xLeft  + (corner !== "tr" ? taper : 0);
+  const effRight = b.xRight - (corner !== "tl" ? taper : 0);
+  return x >= effLeft && x <= effRight;
+}
+
+function hitTest(b: BuildingBounds, x: number, y: number): boolean {
+  if (!inRect(b, x, y)) return false;
+  return !b.chamfer || chamferHit(b, x, y);
+}
 
 type SliceEntry = {
   bounds: readonly BuildingBounds[];
@@ -17,8 +37,7 @@ export class BuildingRegistry {
     const frozen = bounds as readonly BuildingBounds[];
     this.map.set(`${sliceIndex}:${layerKey}`, {
       bounds: frozen,
-      collide: (x, y) =>
-        frozen.find(b => x >= b.xLeft && x <= b.xRight && y >= b.yTop && y <= b.yBottom) ?? null,
+      collide: (x, y) => frozen.find(b => hitTest(b, x, y)) ?? null,
     });
   }
 

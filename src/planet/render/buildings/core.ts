@@ -507,7 +507,7 @@ export function drawBuilding(
   rng: RNG,
   building: BuildingRect,
   opts: BuildingOpts,
-): void {
+): Tier[] {
   const {
     yBase,
     windowOpts,
@@ -516,7 +516,7 @@ export function drawBuilding(
   } = opts;
 
   const tiers = layoutVolumes(building, yBase, rng, opts);
-  if (tiers.length === 0) return;
+  if (tiers.length === 0) return tiers;
 
   for (const t of tiers) {
     const drift = bodyColorVariance > 0 ? pickColorDrift(rng, bodyColorVariance) : null;
@@ -535,6 +535,7 @@ export function drawBuilding(
 
   const topTier = tiers.reduce((a, b) => (a.top < b.top ? a : b));
   drawBuildingDecorations(canvas, rng, tiers, topTier, building, yBase, opts, accent);
+  return tiers;
 }
 
 // ---------- compound: slice-level features ----------

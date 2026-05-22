@@ -8,7 +8,7 @@ import {
   drawBuilding, drawStreetLamps, drawBridge, drawDetailedGreebles, drawSimpleGreebles,
   FRONT_THEME, BACK_THEME,
   BuildingRegistry,
-  type Animator, type BuildingCanvas, type BuildingRect, type BuildingTheme, type BuildingOpts, type SliceContext,
+  type Animator, type BuildingCanvas, type BuildingRect, type BuildingTheme, type BuildingOpts, type SliceContext, type Tier,
 } from "./buildings";
 import type { SliceFactory } from "./slice-ring";
 
@@ -75,6 +75,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
 
     // One shared canvas for all buildings — avoids 7-8 Graphics objects per building.
     const buildingCanvas = makeCanvas(3);
+    const allTiers: Tier[] = [];
 
     // Pass 1: low-rise fillers (always present, keeps ground covered)
     const fillerCount = randInt(rng, 3, 5);
@@ -83,12 +84,12 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
       const h = randInt(rng, 8, 38);
       const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
       built.push(building);
-      drawBuilding(buildingCanvas, rng, building, {
+      allTiers.push(...drawBuilding(buildingCanvas, rng, building, {
         yBase,
         windowMinH:     18,
         windowOpts:     { stepX: 4, stepY: 4, padTop: 4, padBottom: 6, density: 0.45 },
         shopFrontChance: 0.55,
-      });
+      }));
     }
 
     // Pass 2: main skyscrapers (density-gated)
@@ -99,7 +100,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
         const h = randInt(rng, minH, maxH);
         const building = { x: randInt(rng, 0, Math.max(0, sliceWidthPxAtZoom1 - w)), w, h };
         built.push(building);
-        drawBuilding(buildingCanvas, rng, building, {
+        allTiers.push(...drawBuilding(buildingCanvas, rng, building, {
           yBase,
           windowMinH:       25,
           antennaChance:    0.55,
@@ -108,13 +109,13 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
           landingPadMinH:   150,
           diagonalAccentChance: 0.1,
           chamferChance: 0.95,
-        });
+        }));
       }
     }
 
     if (registry && layerKey) {
-      registry.register(i, layerKey, built.map(b => ({
-        xLeft: b.x, xRight: b.x + b.w, yTop: yBase - b.h, yBottom: yBase,
+      registry.register(i, layerKey, allTiers.map(t => ({
+        xLeft: t.x, xRight: t.x + t.w, yTop: t.top, yBottom: t.bottom, chamfer: t.chamfer,
       })));
     }
 
@@ -142,6 +143,7 @@ type BackCityCtx = {
   canvas: BuildingCanvas;
   rng: RNG;
   built: BuildingRect[];
+  tiers: Tier[];
   sliceW: number;
   yBase: number;
 };
@@ -152,13 +154,13 @@ function buildBackFillers(ctx: BackCityCtx, count: number): void {
     const h = randInt(ctx.rng, 5, 22);
     const building: BuildingRect = { x: randInt(ctx.rng, 0, Math.max(0, ctx.sliceW - w)), w, h };
     ctx.built.push(building);
-    drawBuilding(ctx.canvas, ctx.rng, building, {
+    ctx.tiers.push(...drawBuilding(ctx.canvas, ctx.rng, building, {
       yBase: ctx.yBase,
       windowMinH: 8,
       windowOpts: { stepX: 5, stepY: 5, padTop: 3, padBottom: 6, padLeft: 1, padRight: 2, density: 0.3 },
       shopFrontChance: 0.45,
       shopFrontMinH: 8,
-    });
+    }));
   }
 }
 
@@ -168,7 +170,7 @@ function buildBackTowers(ctx: BackCityCtx, count: number, minH: number, maxH: nu
     const h = randInt(ctx.rng, minH, maxH);
     const building: BuildingRect = { x: randInt(ctx.rng, 0, Math.max(0, ctx.sliceW - w)), w, h };
     ctx.built.push(building);
-    drawBuilding(ctx.canvas, ctx.rng, building, {
+    ctx.tiers.push(...drawBuilding(ctx.canvas, ctx.rng, building, {
       yBase: ctx.yBase,
       windowMinH: 25,
       antennaChance: 0.5,
@@ -178,7 +180,7 @@ function buildBackTowers(ctx: BackCityCtx, count: number, minH: number, maxH: nu
       shopFrontChance: 0.35,
       diagonalAccentChance: 0.1,
       chamferChance: 0.95,
-    });
+    }));
   }
 }
 
@@ -201,14 +203,14 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
     const theme: BuildingTheme = { ...BACK_THEME, baseColor };
     const built: BuildingRect[] = [];
     const buildingCanvas = makeCanvas(0);
-    const ctx: BackCityCtx = { canvas: buildingCanvas, rng, built, sliceW: sliceWidthPxAtZoom1, yBase };
+    const ctx: BackCityCtx = { canvas: buildingCanvas, rng, built, tiers: [], sliceW: sliceWidthPxAtZoom1, yBase };
 
     buildBackFillers(ctx, randInt(rng, 2, 4));
     if (chance(rng, density)) buildBackTowers(ctx, randInt(rng, 1, 4), minH, maxH);
 
     if (registry && layerKey) {
-      registry.register(i, layerKey, built.map(b => ({
-        xLeft: b.x, xRight: b.x + b.w, yTop: yBase - b.h, yBottom: yBase,
+      registry.register(i, layerKey, ctx.tiers.map(t => ({
+        xLeft: t.x, xRight: t.x + t.w, yTop: t.top, yBottom: t.bottom, chamfer: t.chamfer,
       })));
     }
 
