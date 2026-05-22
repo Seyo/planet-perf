@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container } from "pixi.js";
 import { normalize180 } from "../math";
 
 export type Slice = Container & { homeDeg: number };
@@ -72,10 +72,4 @@ export class SliceRing {
         screenX + sliceScreenW > -halfW - cullPadPx && screenX < halfW + cullPadPx;
     }
   }
-}
-
-// Simple debug content you can replace later
-export function debugSliceFactory(i: number) {
-  const color = i === 0 ? 0xff0000 : i % 2 === 0 ? 0x00ffcc : 0x3366ff;
-  return new Graphics().rect(10, 10, 10, 40).fill({ color, alpha: 1 });
 }

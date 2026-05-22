@@ -14,7 +14,7 @@ const MIN_CRUISE_DEG            = 15; // minimum trip distance
 const MAX_OVERSHOOTS            =  1;
 const LANDING_MISS_DEG          = 10;
 
-export type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
+type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
 type CruisePicker = (deg: number) => { toDeg: number } | null;
 
 function pickFromDistrict(districts: readonly DistrictRange[], depIdx: number): { startDeg: number; endDeg: number } {
@@ -61,11 +61,11 @@ const CALLOUT_RING  = 5;
 const CALLOUT_DIAG  = 15;
 const CALLOUT_HORIZ = 18;
 
-export const MAX_CLIMB_RATE   = DEFAULT_FLIGHT_CONFIG.maxClimbRate;
-export const MAX_DESCENT_RATE = DEFAULT_FLIGHT_CONFIG.maxDescentRate;
-export const MAX_VERT_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxVertAccel;
-export const MAX_HORIZ_SPEED  = DEFAULT_FLIGHT_CONFIG.maxHorizSpeed;
-export const MAX_TURN_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxTurnAccel;
+const MAX_CLIMB_RATE   = DEFAULT_FLIGHT_CONFIG.maxClimbRate;
+const MAX_DESCENT_RATE = DEFAULT_FLIGHT_CONFIG.maxDescentRate;
+const MAX_VERT_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxVertAccel;
+const MAX_HORIZ_SPEED  = DEFAULT_FLIGHT_CONFIG.maxHorizSpeed;
+const MAX_TURN_ACCEL   = DEFAULT_FLIGHT_CONFIG.maxTurnAccel;
 
 type Phase = 'grounded' | 'ascending' | 'cruising' | 'descending' | 'dying';
 
@@ -79,7 +79,7 @@ type ShuttleColors = { warm: number; cool: number };
 type ExplosionOrigin = { deg: number; y: number; vDeg: number; vY: number };
 
 // Minimal world-space position (deg + y).
-export type DegY = { deg: number; y: number };
+type DegY = { deg: number; y: number };
 
 // One simulation step, carrying the delta-time through the internal update chain.
 type Tick = { dt: number };
@@ -639,7 +639,7 @@ class Shuttle {
 
 // ─── ShuttleLayer ─────────────────────────────────────────────────────────────
 
-export type ShuttleLayerSpec = { motionScale: number; yMotionScale: number; label: string; districts?: readonly DistrictRange[]; planFn?: FlightPlanFn };
+type ShuttleLayerSpec = { motionScale: number; yMotionScale: number; label: string; districts?: readonly DistrictRange[]; planFn?: FlightPlanFn };
 type ShuttleLayerInit = ShuttleLayerSpec & { count: number };
 
 export class ShuttleLayer {

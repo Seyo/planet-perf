@@ -1,4 +1,4 @@
-export type TaperShape = 'linear' | 'smooth' | 'quad';
+type TaperShape = 'linear' | 'smooth' | 'quad';
 
 export type District = {
   startSlice: number;
@@ -14,7 +14,7 @@ export type TaperConfig = {
   shape:         TaperShape;
 };
 
-export const DEFAULT_TAPER: TaperConfig = {
+const DEFAULT_TAPER: TaperConfig = {
   centerDensity: 0.68,
   edgeDensity:   0.20,
   centerMaxH:    280,
@@ -22,7 +22,7 @@ export const DEFAULT_TAPER: TaperConfig = {
   shape:         'smooth',
 };
 
-export const DEFAULT_DISTRICT2_TAPER: TaperConfig = {
+const DEFAULT_DISTRICT2_TAPER: TaperConfig = {
   centerDensity: 0.50,
   edgeDensity:   0.75,
   centerMaxH:    500,

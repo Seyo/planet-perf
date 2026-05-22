@@ -12,10 +12,10 @@ export interface ActorLike {
 import { SliceLayer } from "./render/slice-layer";
 import { SliceRing } from "./render/slice-ring";
 import type { SliceFactory } from "./render/slice-ring";
-import { makeBackCityFactory, makeBackEmptySliceFactory, makeDeepCoreFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
+import { makeBackCityFactory, makeBackEmptySliceFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
 import { sliceTaperParams, proportionalTaperParams, type TaperConfig, type District } from "./render/district-taper";
-export type { TaperConfig, TaperShape, District } from "./render/district-taper";
-export { DEFAULT_TAPER, DEFAULT_DISTRICT2_TAPER, districtMass } from "./render/district-taper";
+export type { TaperConfig, District } from "./render/district-taper";
+export { districtMass } from "./render/district-taper";
 import type { Animator } from "./render/layer-factories";
 import type { BuildingRegistry } from "./render/buildings";
 
@@ -29,8 +29,7 @@ export type WorldState = {
 const INERTIA_ENABLED = true;
 const INERTIA_FRICTION = 0.95;
 
-export const HAZE_COLOR = 0x7a6090; // dusty purple — tweak freely
-export const CAVE_HAZE_COLOR = 0x2c3f5a; // slightly brighter than shallow cave background
+const HAZE_COLOR = 0x7a6090;
 
 // Zoom constraints based on FRONT ring slice density
 const MAX_VISIBLE_SLICES_ZOOM_OUT = 72 * 0.5;
@@ -303,17 +302,6 @@ export class Planet {
   }
 }
 
-// Convenience builders
-export function makeFrontLayer(animators?: Animator[], citySliceCount = 9) {
-  const baseColor           = 0x060810;
-  const sliceWidthPxAtZoom1 = 120;
-  const cityFactory  = makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density: 0.68, baseColor }, animators);
-  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1, baseColor });
-  const factory: SliceFactory = (i, deg) => i < citySliceCount ? cityFactory(i, deg) : emptyFactory(i, deg);
-  const frontRing = new SliceRing(72, 5, sliceWidthPxAtZoom1, factory);
-  return new SliceLayer(frontRing, 1.0, 1.0, 1.0);
-}
-
 export function makeTaperedFrontLayer(districts: District[], animators?: Animator[], registry?: BuildingRegistry) {
   const baseColor           = 0x060810;
   const sliceWidthPxAtZoom1 = 120;
@@ -394,45 +382,6 @@ export function makeBackCityLayer(config: BackCityConfig = {}, districts?: Distr
   return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
 }
 
-export function makeGroupedBackCityLayer(configs: BackCityConfig[], districts?: District[]): SliceLayer {
-  const n = configs.length;
-  const motionScale  = configs.reduce((s, c) => s + (c.motionScale  ?? 0.97), 0) / n;
-  const yMotionScale = configs.reduce((s, c) => s + (c.yMotionScale ?? motionScale), 0) / n;
-  const bakeResolution = Math.max(...configs.map(c => c.bakeResolution ?? 1));
-
-  const sliceWidth   = 120;
-  const emptyFactory = makeBackEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
-
-  const sliceFactoryMap = new Map<number, SliceFactory[]>();
-  for (const d of (districts ?? [])) {
-    for (let j = 0; j < d.sliceCount; j++) {
-      sliceFactoryMap.set(d.startSlice + j, configs.map(c => {
-        const { density: dv, maxH: mH } = proportionalTaperParams(
-          { density: c.density ?? 0.85, maxH: c.maxH ?? 280 }, j, d.sliceCount, d.taperConfig,
-        );
-        return makeBackCityFactory({
-          sliceWidthPxAtZoom1: sliceWidth,
-          baseColor: c.baseColor ?? 0x060810,
-          density: dv, minH: c.minH ?? 40, maxH: mH,
-          salt: c.salt ?? 202,
-          underground: c.underground ?? false,
-          undergroundDim: c.undergroundDim ?? 0,
-        });
-      }));
-    }
-  }
-
-  const getSliceFacts = (i: number): SliceFactory[] => sliceFactoryMap.get(i) ?? [emptyFactory];
-  const factory: SliceFactory = (i) => {
-    const root = new Container();
-    for (const f of getSliceFacts(i)) root.addChild(f(i, 0));
-    return root;
-  };
-
-  const ring = new SliceRing(72, 5, sliceWidth, factory, bakeResolution);
-  return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
-}
-
 export function makeGroundLayer() {
   const ring = new SliceRing(
     72,
@@ -453,17 +402,6 @@ export function makeShallowCaveLayer() {
   );
   // Slower X parallax (0.96) + slightly slower Y (0.93) → feels one depth deeper
   return new SliceLayer(ring, 0.50, 1.0, 0.93);
-}
-
-export function makeDeepCoreLayer() {
-  const ring = new SliceRing(
-    36,
-    10,
-    120,
-    makeDeepCoreFactory({ sliceWidthPxAtZoom1: 120 }),
-  );
-  // Much slower on both axes → clearly deeper than the cave
-  return new SliceLayer(ring, 0.82, 1.0, 0.75);
 }
 
 // Sky slices intentionally render a 10000×4155 gradient rect spanning the
@@ -524,34 +462,3 @@ export function makeHazeOverlay(opts: HazeOpts): Container {
   return container;
 }
 
-// Haze for the underground mirror city — gradient runs top-to-bottom below the ground line.
-// Pass `into` to update an existing container in-place (for palette switching).
-export function makeUndergroundHazeOverlay(hazeAlpha: number, color = CAVE_HAZE_COLOR, into?: Container): Container {
-  const topY    =   -2;  // ground surface
-  const bottomY = 1850;  // ~5× the original 352px depth
-
-  const r = (color >> 16) & 0xff;
-  const g = (color >> 8)  & 0xff;
-  const b =  color        & 0xff;
-
-  const gradient = new FillGradient({
-    type: 'linear',
-    start: { x: 0, y: 0 },
-    end:   { x: 0, y: 1 },
-    textureSpace: 'local',
-    colorStops: [
-      { offset: 0,    color: `rgba(${r},${g},${b},0)` },
-      { offset: 0.03, color: `rgba(${r},${g},${b},${hazeAlpha})` },
-      { offset: 1,    color: `rgba(${r},${g},${b},0)` },
-    ],
-  });
-
-  const container = into ?? new Container();
-  if (into) for (const c of into.removeChildren()) c.destroy();
-  container.addChild(
-    new Graphics()
-      .rect(-5000, topY, 10000, bottomY - topY)
-      .fill(gradient),
-  );
-  return container;
-}

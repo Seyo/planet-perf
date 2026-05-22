@@ -14,12 +14,7 @@ import type { SliceFactory } from "./slice-ring";
 
 export type { Animator } from "./buildings";
 
-export function shouldSpawn(sliceIndex: number, density: number, salt = 1): boolean {
-  const rng = mulberry32(hashSeed(sliceIndex, salt));
-  return chance(rng, density);
-}
-
-export function darken(color: number, amount: number): number {
+function darken(color: number, amount: number): number {
   const r = (color >> 16) & 0xff;
   const g = (color >> 8)  & 0xff;
   const b =  color        & 0xff;
@@ -334,7 +329,7 @@ export function makeShallowCaveFactory(opts: FactoryOpts): SliceFactory {
 }
 
 // Deep core: dense glowing magma pillars
-export function makeDeepCoreFactory(opts: FactoryOpts): SliceFactory {
+function makeDeepCoreFactory(opts: FactoryOpts): SliceFactory {
   const {
     sliceWidthPxAtZoom1,
     baseColor = 0x2a0800,

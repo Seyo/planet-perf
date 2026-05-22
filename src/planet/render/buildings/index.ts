@@ -1,6 +1,6 @@
 export type {
   BuildingCanvas, BuildingTheme, BuildingRect, BuildingOpts,
-  WindowOpts, Archetype, BodyTint, Animator, Tier, SliceContext,
+  Animator, Tier, SliceContext,
 } from './core';
 export {
   FRONT_THEME, BACK_THEME,
@@ -9,7 +9,5 @@ export {
   drawBuilding, drawStreetLamps, drawBridge,
   drawDetailedGreebles, drawSimpleGreebles,
 } from './core';
-export { drawUndergroundCity } from './underground';
-export { drawBuildingDecorations } from './decorations';
 export type { BuildingBounds } from './registry';
 export { BuildingRegistry } from './registry';

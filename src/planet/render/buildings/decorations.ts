@@ -2,7 +2,7 @@ import { type Graphics } from "pixi.js";
 import { type RNG, chance, randInt } from "../rng";
 import type { BuildingCanvas, BuildingOpts, BuildingRect, Tier } from "./core";
 
-export function drawAntenna(
+function drawAntenna(
   canvas: BuildingCanvas,
   rng: RNG,
   building: BuildingRect,
@@ -25,7 +25,7 @@ export function drawAntenna(
   }
 }
 
-export function drawShopFront(
+function drawShopFront(
   canvas: BuildingCanvas,
   building: BuildingRect,
   yBase: number,
@@ -35,7 +35,7 @@ export function drawShopFront(
   canvas.glows.rect(x - 1, yBase - 4, w + 1, 4);
 }
 
-export function drawLandingPad(
+function drawLandingPad(
   canvas: BuildingCanvas,
   rng: RNG,
   building: BuildingRect,

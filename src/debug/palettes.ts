@@ -1,4 +1,4 @@
-export type SkyStop = { offset: number; color: number };
+type SkyStop = { offset: number; color: number };
 
 export type LightPalette = {
   name: string;

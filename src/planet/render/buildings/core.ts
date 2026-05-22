@@ -23,7 +23,7 @@ export function setLightColors(warm: number, cool: number): void {
 
 export type BuildingRect = { x: number; w: number; h: number };
 
-export type BodyTint = { x: number; y: number; w: number; h: number; d: number };
+type BodyTint = { x: number; y: number; w: number; h: number; d: number };
 
 export type BuildingCanvas = {
   bodies:    Graphics;
@@ -75,7 +75,7 @@ export const BACK_THEME: BuildingTheme = {
   coolAlpha:      0.7,
 };
 
-export type WindowOpts = {
+type WindowOpts = {
   stepX?:      number;
   stepY?:      number;
   padTop?:     number;
@@ -86,7 +86,7 @@ export type WindowOpts = {
   warmChance?: number;
 };
 
-export type Archetype = "squatT" | "stepped" | "staircase" | "twinStack";
+type Archetype = "squatT" | "stepped" | "staircase" | "twinStack";
 
 export type BuildingOpts = {
   yBase:                number;
@@ -225,7 +225,7 @@ function pickWindowLayer(canvas: BuildingCanvas, rng: RNG, isWarm: boolean): Gra
   return isWarm ? canvas.warm : canvas.cool;
 }
 
-export function drawWindowGrid(
+function drawWindowGrid(
   canvas: BuildingCanvas,
   rng: RNG,
   building: BuildingRect,
@@ -253,8 +253,8 @@ export function drawWindowGrid(
 
 // ---------- v2: stacked-volume helpers ----------
 
-export type ChamferCorner = "tl" | "tr" | "both";
-export type Chamfer = { corner: ChamferCorner; size: number };
+type ChamferCorner = "tl" | "tr" | "both";
+type Chamfer = { corner: ChamferCorner; size: number };
 export type Tier = { x: number; w: number; h: number; top: number; bottom: number; chamfer?: Chamfer };
 
 function pickColorDrift(rng: RNG, variance: number): { d: number } {
