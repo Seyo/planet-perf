@@ -203,7 +203,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
       drawUndergroundCity(root, ugRng, built, { yBase, dim: undergroundDim });
     }
     root.addChild(
-      new Graphics().rect(0, yBase, sliceWidthPxAtZoom1, 50).fill({ color: baseColor }),
+      new Graphics().rect(0, yBase, sliceWidthPxAtZoom1, 500).fill({ color: baseColor }),
     );
 
     return root;
