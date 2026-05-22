@@ -42,11 +42,11 @@ function pickDegInDistricts(districts: readonly DistrictRange[]): number {
 }
 
 function makeCruisePicker(districts: readonly DistrictRange[]): CruisePicker | undefined {
-  if (districts.length < 2) return undefined;
+  if (districts.length === 0) return undefined;
   return (deg: number): { dirSign: number; cruiseDegLimit: number } | null => {
     const norm   = ((deg % 360) + 360) % 360;
     const depIdx = districts.findIndex(d => norm >= d.startDeg && norm < d.endDeg);
-    const target = pickFromDistrict(districts, depIdx);
+    const target = districts.length === 1 ? districts[0] : pickFromDistrict(districts, depIdx);
     const tDeg   = target.startDeg + Math.random() * (target.endDeg - target.startDeg);
     let diff     = ((tDeg - norm + 360) % 360);
     if (diff > 180) diff -= 360;
