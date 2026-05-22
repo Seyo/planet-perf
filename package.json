@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "knip": "knip"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
     "pixi.js": "^8.16.0"
   },
   "devDependencies": {
+    "knip": "^6.14.1",
     "playwright": "^1.60.0",
     "typescript": "^5.9.3",
     "vite": "^8.0.13"
