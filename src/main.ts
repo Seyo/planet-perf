@@ -65,7 +65,7 @@ planet.addLayer(activeSkyLayer,          { behindAll: true });
 planet.addLayer(makeShallowCaveLayer(),  { behindAll: true });
 
 // Background city layers — far to near, uniform motionScale steps including the front layer at 1.0
-const BACK_LAYER_COUNT  = 35;
+const BACK_LAYER_COUNT  = 25;
 const BACK_SCALE_START  = 0.70;
 const BACK_SCALE_END    = (BACK_LAYER_COUNT - 1 + BACK_SCALE_START) / BACK_LAYER_COUNT;
 const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
@@ -75,7 +75,7 @@ const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 // Constraint: FAR_GROUP_COUNT * FAR_GROUP_SIZE <= BACK_LAYER_COUNT - 10 (underground boundary).
 const FAR_GROUP_COUNT     = 3;
 const FAR_GROUP_SIZE      = 3;
-const FAR_HAZE_BOOST      = 0.08; // extra haze opacity for grouped far layers
+const FAR_HAZE_BOOST      = 0.15; // extra haze opacity for grouped far layers
 
 let district1State: TaperConfig = { ...DEFAULT_TAPER };
 let district2State: TaperConfig = { ...DEFAULT_DISTRICT2_TAPER };
@@ -88,7 +88,7 @@ function getDistricts(): District[] {
 }
 
 type HazeEntry  = { container: Container; alpha: number; underground: boolean };
-type BackEntry  = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer };
+type BackEntry  = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer; alpha: number };
 const hazeEntries: HazeEntry[] = [];
 const bakedLayers: SliceLayer[] = [];
 const backEntries: BackEntry[]  = [];
@@ -106,7 +106,9 @@ for (let g = 0; g < FAR_GROUP_COUNT; g++) {
   }
   const rebuild = (districts: District[]) => makeGroupedBackCityLayer(groupConfigs, districts);
   const backLayer = rebuild(getDistricts());
-  backEntries.push({ layer: backLayer, rebuild });
+  const fadeAlpha = (g + 1) / (FAR_GROUP_COUNT + 1);
+  backLayer.container.alpha = fadeAlpha;
+  backEntries.push({ layer: backLayer, rebuild, alpha: fadeAlpha });
   bakedLayers.push(backLayer);
   planet.addLayer(backLayer, { behindAll: true });
 
@@ -132,7 +134,7 @@ for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
   const layerCfg = { motionScale, yMotionScale: motionScale, minH, maxH, salt, underground: isUnderground, undergroundDim: isUnderground ? 0.5 * (1 - ugT) : 0, bakeResolution };
   const rebuild = (districts: District[]) => makeBackCityLayer(layerCfg, districts);
   const backLayer = rebuild(getDistricts());
-  backEntries.push({ layer: backLayer, rebuild });
+  backEntries.push({ layer: backLayer, rebuild, alpha: 1.0 });
   bakedLayers.push(backLayer);
   planet.addLayer(backLayer, { behindAll: true });
   if (i >= ACTOR_LAYER_START) {
@@ -177,6 +179,7 @@ function rebuildBackLayers() {
   for (const entry of backEntries) {
     const old = entry.layer;
     const next = entry.rebuild(districts);
+    next.container.alpha = entry.alpha;
     planet.replaceLayer(old, next);
     entry.layer = next;
     const idx = bakedLayers.indexOf(old);
