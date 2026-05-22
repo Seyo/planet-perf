@@ -12,7 +12,7 @@ import {
   type District,
 } from "./planet/planet";
 import { makeActorLayer, ActorLayer, type ActorLayerConfig, type DistrictRange } from "./planet/render/actor-layer";
-import { makeShuttleLayer, ShuttleLayer } from "./planet/render/actors";
+import { makeShuttleLayer, ShuttleLayer, distanceFlightPlan, type FlightPlanFn } from "./planet/render/actors";
 import { LayoutPanel } from "./debug/layout-panel";
 import { DebugPanel } from "./debug/debug-panel";
 import { UserPanel } from "./ui";
@@ -73,6 +73,10 @@ const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 const DEGS_PER_SLICE       = 5;
 const SHUTTLE_MIN_SLICES   = 10;
 
+function shuttlesActive(districts: District[]): boolean {
+  return districts.length > 1 || districts.some(d => d.sliceCount > SHUTTLE_MIN_SLICES);
+}
+
 const layoutPanel = new LayoutPanel();
 let activeDistricts: District[] = layoutPanel.getDistricts();
 
@@ -91,7 +95,8 @@ const ACTOR_DISTRICTS = computeActorDistricts(getDistricts());
 type HazeEntry    = { container: Container; alpha: number; bottomAlpha: number };
 type BackEntry    = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer };
 type ActorEntry   = { layer: ActorLayer; config: ActorLayerConfig };
-type ShuttleEntry = { layer: ShuttleLayer; motionScale: number; yMotionScale: number; label: string };
+type ShuttleEntry = { layer: ShuttleLayer; motionScale: number; yMotionScale: number; label: string; planFn: FlightPlanFn };
+
 const hazeEntries: HazeEntry[]     = [];
 const bakedLayers: SliceLayer[]    = [];
 const backEntries: BackEntry[]     = [];
@@ -136,7 +141,7 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   }
   if (hasActors && i < BACK_LAYER_COUNT - 5) {
     const sl = makeShuttleLayer({ motionScale, yMotionScale: motionScale, label: String(i), districts: ACTOR_DISTRICTS }, shuttleDebugToggle);
-    shuttleEntries.push({ layer: sl, motionScale, yMotionScale: motionScale, label: String(i) });
+    shuttleEntries.push({ layer: sl, motionScale, yMotionScale: motionScale, label: String(i), planFn: distanceFlightPlan });
     shuttleLayers.push(sl);
     planet.addActorLayer(sl);
   }
@@ -164,7 +169,7 @@ planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();
 
-if (!getDistricts().some(d => d.sliceCount > SHUTTLE_MIN_SLICES)) {
+if (!shuttlesActive(getDistricts())) {
   for (const e of shuttleEntries) { e.layer.clearShuttles(); e.layer.container.visible = false; }
 }
 
@@ -200,7 +205,7 @@ function rebuildBackEntry(entry: BackEntry, districts: District[]): void {
 function rebuildShuttleEntry(e: ShuttleEntry, actorDists: readonly DistrictRange[]): void {
   const old = e.layer;
   const next = makeShuttleLayer(
-    { motionScale: e.motionScale, yMotionScale: e.yMotionScale, label: e.label, districts: actorDists },
+    { motionScale: e.motionScale, yMotionScale: e.yMotionScale, label: e.label, districts: actorDists, planFn: e.planFn },
     shuttleDebugToggle,
   );
   planet.replaceActorLayer(old, next);
@@ -218,7 +223,7 @@ function applyDistricts(districts: District[]): void {
   activeFrontLayer = nextFront;
   for (const entry of backEntries) rebuildBackEntry(entry, districts);
   for (const entry of actorEntries) entry.layer.reset(actorDists, entry.config);
-  const shuttlesEnabled = districts.some(d => d.sliceCount > SHUTTLE_MIN_SLICES);
+  const shuttlesEnabled = shuttlesActive(districts);
   for (const e of shuttleEntries) {
     if (!shuttlesEnabled) { e.layer.clearShuttles(); e.layer.container.visible = false; }
     else rebuildShuttleEntry(e, actorDists);

@@ -59,9 +59,26 @@ export const DEFAULT_FLIGHT_CONFIG: FlightConfig = {
   bodyHalfLenMin:        3.0,
   bodyHalfLenMax:        5.0,
   engineIntensity:       1.0,
-  explodeChance:        0.25,
+  explodeChance:        0.01,
   explodeAfterFrames:      0,
 };
+
+const DESCENT_PD_GAIN = 0.008;
+
+export function estimateDescentDeg(config: FlightConfig, cruiseY: number, speed: number): number {
+  const h = -2 - cruiseY;
+  let y = cruiseY, vY = 0, vDeg = speed, dist = 0;
+  for (let i = 0; i < 2000; i++) {
+    const targetVY = Math.max(-config.maxClimbRate, Math.min(config.maxDescentRate, (-2 - y) * DESCENT_PD_GAIN));
+    vY   += Math.max(-config.maxVertAccel, Math.min(config.maxVertAccel, targetVY - vY));
+    y    += vY;
+    if (y >= -2 - config.landThreshold) break;
+    const af = Math.max(0, Math.min(1, (y - cruiseY) / h));
+    vDeg += Math.max(-config.maxTurnAccel, Math.min(config.maxTurnAccel, speed * (1 - af * af) - vDeg));
+    dist += vDeg;
+  }
+  return dist;
+}
 
 export const DEFAULT_EXPLOSION_CONFIG: ExplosionConfig = {
   maxFrames:             90,
