@@ -1,5 +1,4 @@
 import type { District, TaperConfig } from '../planet/planet';
-import { DEFAULT_TAPER } from '../planet/planet';
 
 type SliderSpec     = { label: string; value: number; min: number; max: number; step: number };
 type SingleState    = { startSlice: number; sliceCount: number; taperConfig: TaperConfig };
@@ -154,7 +153,10 @@ export class LayoutPanel {
   private districts: District[] = [];
 
   constructor() {
-    const singleState: SingleState = { startSlice: 0, sliceCount: 9, taperConfig: { ...DEFAULT_TAPER } };
+    const singleState: SingleState = {
+      startSlice: 0, sliceCount: 72,
+      taperConfig: { centerDensity: 0.85, edgeDensity: 0.50, centerMaxH: 400, edgeMaxH: 80, shape: 'linear' },
+    };
     this.layouts = [
       {
         id: 'single', label: 'Single district',

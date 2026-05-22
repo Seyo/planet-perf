@@ -70,7 +70,8 @@ const BACK_SCALE_START  = 0.70;
 const BACK_SCALE_END    = (BACK_LAYER_COUNT - 1 + BACK_SCALE_START) / BACK_LAYER_COUNT;
 const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 
-const DEGS_PER_SLICE = 5;
+const DEGS_PER_SLICE       = 5;
+const SHUTTLE_MIN_SLICES   = 10;
 
 const layoutPanel = new LayoutPanel();
 let activeDistricts: District[] = layoutPanel.getDistricts();
@@ -163,7 +164,7 @@ planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();
 
-if (getDistricts().length <= 1) {
+if (!getDistricts().some(d => d.sliceCount > SHUTTLE_MIN_SLICES)) {
   for (const e of shuttleEntries) { e.layer.clearShuttles(); e.layer.container.visible = false; }
 }
 
@@ -217,9 +218,9 @@ function applyDistricts(districts: District[]): void {
   activeFrontLayer = nextFront;
   for (const entry of backEntries) rebuildBackEntry(entry, districts);
   for (const entry of actorEntries) entry.layer.reset(actorDists, entry.config);
-  const isSingle = districts.length <= 1;
+  const shuttlesEnabled = districts.some(d => d.sliceCount > SHUTTLE_MIN_SLICES);
   for (const e of shuttleEntries) {
-    if (isSingle) { e.layer.clearShuttles(); e.layer.container.visible = false; }
+    if (!shuttlesEnabled) { e.layer.clearShuttles(); e.layer.container.visible = false; }
     else rebuildShuttleEntry(e, actorDists);
   }
 }
