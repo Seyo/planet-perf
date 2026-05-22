@@ -471,15 +471,16 @@ export function makeSkyLayer(skyGradient?: Array<{ offset: number; color: number
 export const HAZE_TOP_Y = -250;
 
 type HazeOpts = {
-  alpha:    number;
-  color?:   number;
-  topY?:    number;
-  bottomY?: number;
-  into?:    Container;
+  alpha:        number;
+  bottomAlpha?: number;
+  color?:       number;
+  topY?:        number;
+  bottomY?:     number;
+  into?:        Container;
 };
 
 export function makeHazeOverlay(opts: HazeOpts): Container {
-  const { alpha: hazeAlpha, color = HAZE_COLOR, topY = HAZE_TOP_Y, bottomY = 10, into } = opts;
+  const { alpha: hazeAlpha, bottomAlpha = 0, color = HAZE_COLOR, topY = HAZE_TOP_Y, bottomY = 10, into } = opts;
   const r = (color >> 16) & 0xff;
   const g = (color >> 8)  & 0xff;
   const b =  color        & 0xff;
@@ -491,8 +492,8 @@ export function makeHazeOverlay(opts: HazeOpts): Container {
     textureSpace: 'local',
     colorStops: [
       { offset: 0,    color: `rgba(${r},${g},${b},0)` },
-      { offset: 0.90, color: `rgba(${r},${g},${b},${hazeAlpha})` },
-      { offset: 1,    color: `rgba(${r},${g},${b},0)` },
+      { offset: 0.65, color: `rgba(${r},${g},${b},${hazeAlpha})` },
+      { offset: 1,    color: `rgba(${r},${g},${b},${bottomAlpha})` },
     ],
   });
 

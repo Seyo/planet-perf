@@ -85,7 +85,7 @@ const ACTOR_DISTRICTS = getDistricts().map(d => ({
   endDeg:   (d.startSlice + d.sliceCount) * DEGS_PER_SLICE,
 }));
 
-type HazeEntry  = { container: Container; alpha: number };
+type HazeEntry  = { container: Container; alpha: number; bottomAlpha: number };
 type BackEntry  = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer };
 const hazeEntries: HazeEntry[] = [];
 const bakedLayers: SliceLayer[] = [];
@@ -117,9 +117,11 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
     planet.addActorLayer(sl);
   }
 
-  const hazeAlpha = 0.30 - t * 0.24;
-  const hazeContainer = makeHazeOverlay({ alpha: hazeAlpha, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
-  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha });
+  const hazeAlpha    = 0.30 - t * 0.24;
+  const backT        = i < 10 ? 1 - i / 9 : 0;
+  const bottomAlpha  = Math.round(backT * 0.95 * 100) / 100;
+  const hazeContainer = makeHazeOverlay({ alpha: hazeAlpha, bottomAlpha, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
+  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha, bottomAlpha });
   planet.addOverlay(hazeContainer, motionScale);
 }
 
@@ -129,7 +131,7 @@ planet.addLayer(activeFrontLayer, { asInteractionLayer: true });
 planet.addActorLayer(makeActorLayer(1.0, 1.0, ACTOR_DISTRICTS));
 
 const frontHazeContainer = makeHazeOverlay({ alpha: 0.25, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
-hazeEntries.push({ container: frontHazeContainer, alpha: 0.25 });
+hazeEntries.push({ container: frontHazeContainer, alpha: 0.25, bottomAlpha: 0 });
 planet.addOverlay(frontHazeContainer, 1.0);
 
 planet.finalize();
@@ -194,7 +196,7 @@ function applyPalette(p: Palette): void {
   activeSkyLayer.container.addChild(skyBottomLine);
 
   for (const entry of hazeEntries) {
-    makeHazeOverlay({ alpha: entry.alpha, color: p.hazeColor, topY: HAZE_TOP_Y, bottomY: 10, into: entry.container });
+    makeHazeOverlay({ alpha: entry.alpha, bottomAlpha: entry.bottomAlpha, color: p.hazeColor, topY: HAZE_TOP_Y, bottomY: 10, into: entry.container });
   }
 }
 
