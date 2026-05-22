@@ -2,7 +2,6 @@ import { Application, type Container, Graphics } from "pixi.js";
 import {
   Planet,
   makeBackCityLayer,
-  makeGroupedBackCityLayer,
   makeTaperedFrontLayer,
   makeGroundLayer,
   makeHazeOverlay,
@@ -69,13 +68,6 @@ const BACK_SCALE_START  = 0.70;
 const BACK_SCALE_END    = (BACK_LAYER_COUNT - 1 + BACK_SCALE_START) / BACK_LAYER_COUNT;
 const ACTOR_LAYER_START = BACK_LAYER_COUNT - 20;
 
-// Far-background grouping: FAR_GROUP_COUNT groups of FAR_GROUP_SIZE original layers each.
-// Layers within a group share one motionScale and are composited into one baked layer.
-// Constraint: FAR_GROUP_COUNT * FAR_GROUP_SIZE <= BACK_LAYER_COUNT.
-const FAR_GROUP_COUNT     = 3;
-const FAR_GROUP_SIZE      = 3;
-const FAR_HAZE_BOOST      = 0.15; // extra haze opacity for grouped far layers
-
 let district1State: TaperConfig = { ...DEFAULT_TAPER };
 let district2State: TaperConfig = { ...DEFAULT_DISTRICT2_TAPER };
 
@@ -101,31 +93,8 @@ const backEntries: BackEntry[]  = [];
 const shuttleLayers: ShuttleLayer[] = [];
 const shuttleDebugToggle = { visible: false };
 
-// Section 1: far-background composite groups
-for (let g = 0; g < FAR_GROUP_COUNT; g++) {
-  const groupConfigs = [];
-  for (let j = 0; j < FAR_GROUP_SIZE; j++) {
-    const i = g * FAR_GROUP_SIZE + j;
-    const t = i / (BACK_LAYER_COUNT - 1);
-    const motionScale = BACK_SCALE_START + t * (BACK_SCALE_END - BACK_SCALE_START);
-    groupConfigs.push({ motionScale, yMotionScale: motionScale, minH: Math.round(40 + t * 80), maxH: Math.round(100 + t * 180), salt: 1000 + i * 97 });
-  }
-  const rebuild = (districts: District[]) => makeGroupedBackCityLayer(groupConfigs, districts);
-  const backLayer = rebuild(getDistricts());
-  backEntries.push({ layer: backLayer, rebuild });
-  bakedLayers.push(backLayer);
-  planet.addLayer(backLayer, { behindAll: true });
-
-  const midT = (g * FAR_GROUP_SIZE + Math.floor(FAR_GROUP_SIZE / 2)) / (BACK_LAYER_COUNT - 1);
-  const midMotionScale = BACK_SCALE_START + midT * (BACK_SCALE_END - BACK_SCALE_START);
-  const hazeAlpha = 0.30 - midT * 0.24 + FAR_HAZE_BOOST;
-  const hazeContainer = makeHazeOverlay({ alpha: hazeAlpha, color: PALETTES[DEFAULT_PALETTE_IDX].hazeColor });
-  hazeEntries.push({ container: hazeContainer, alpha: hazeAlpha });
-  planet.addOverlay(hazeContainer, midMotionScale);
-}
-
-// Section 2: remaining individual layers
-for (let i = FAR_GROUP_COUNT * FAR_GROUP_SIZE; i < BACK_LAYER_COUNT; i++) {
+// Individual back-city layers, far to near
+for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   const t           = BACK_LAYER_COUNT > 1 ? i / (BACK_LAYER_COUNT - 1) : 0;
   const motionScale = BACK_SCALE_START + t * (BACK_SCALE_END - BACK_SCALE_START);
   const minH        = Math.round(40  + t * 80);

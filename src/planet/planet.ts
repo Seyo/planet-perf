@@ -12,7 +12,7 @@ export interface ActorLike {
 import { SliceLayer } from "./render/slice-layer";
 import { SliceRing } from "./render/slice-ring";
 import type { SliceFactory } from "./render/slice-ring";
-import { makeBackCityFactory, makeDeepCoreFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
+import { makeBackCityFactory, makeBackEmptySliceFactory, makeDeepCoreFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
 import { sliceTaperParams, proportionalTaperParams, type TaperConfig, type District } from "./render/district-taper";
 export type { TaperConfig, TaperShape, District } from "./render/district-taper";
 export { DEFAULT_TAPER, DEFAULT_DISTRICT2_TAPER } from "./render/district-taper";
@@ -353,7 +353,7 @@ export function makeBackCityLayer(config: BackCityConfig = {}, districts?: Distr
   } = config;
 
   const sliceWidth   = 120;
-  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
+  const emptyFactory = makeBackEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
 
   const sliceFactoryMap = new Map<number, SliceFactory>();
   for (const d of (districts ?? [])) {
@@ -384,7 +384,7 @@ export function makeGroupedBackCityLayer(configs: BackCityConfig[], districts?: 
   const bakeResolution = Math.max(...configs.map(c => c.bakeResolution ?? 1));
 
   const sliceWidth   = 120;
-  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
+  const emptyFactory = makeBackEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
 
   const sliceFactoryMap = new Map<number, SliceFactory[]>();
   for (const d of (districts ?? [])) {

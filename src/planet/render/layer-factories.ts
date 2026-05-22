@@ -257,6 +257,19 @@ export function makeEmptySliceFactory(opts: FactoryOpts): SliceFactory {
   return makeGroundSectionFactory({ sliceWidthPxAtZoom1: opts.sliceWidthPxAtZoom1 });
 }
 
+// Empty district slice for back/grouped layers: flat ground cover matching the city slice approach.
+// No soil cross-section — avoids a brown band artifact on far layers where the parallax offsets
+// the detailed fill out from under the sky gradient.
+export function makeBackEmptySliceFactory(opts: FactoryOpts): SliceFactory {
+  const { sliceWidthPxAtZoom1 } = opts;
+  return (_i) => {
+    const root = new Container();
+    root.addChild(new Graphics().rect(0, GROUND_SURFACE_Y, sliceWidthPxAtZoom1, GROUND_STONE_Y - GROUND_SURFACE_Y).fill({ color: GROUND_PATH_COLOR }));
+    root.addChild(new Graphics().rect(0, GROUND_STONE_Y,   sliceWidthPxAtZoom1, GROUND_BOTTOM_Y - GROUND_STONE_Y).fill({ color: GROUND_STONE_COLOR }));
+    return root;
+  };
+}
+
 // Shallow underground: cave chamber with stalactites + stalagmites + crystals
 export function makeShallowCaveFactory(opts: FactoryOpts): SliceFactory {
   const {
