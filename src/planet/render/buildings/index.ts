@@ -1,10 +1,10 @@
 export type {
   BuildingCanvas, BuildingTheme, BuildingRect,
-  Animator, Tier, SliceContext, Archetype,
+  Tier, SliceContext, Archetype,
 } from './core';
 export {
   FRONT_THEME, BACK_THEME,
-  makeCanvas, commitCanvas, registerFlickerAnimators,
+  makeCanvas, commitCanvas,
   setLightColors,
   drawBuilding, drawStreetLamps, drawBridge,
   drawDetailedGreebles, drawSimpleGreebles,

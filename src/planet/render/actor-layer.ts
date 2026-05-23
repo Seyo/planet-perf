@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite, type Renderer, type Texture } from "pixi.js";
 import { normalize180 } from "../math";
 import type { BuildingBounds, BuildingRegistry } from "./buildings";
 
@@ -15,6 +15,45 @@ const HEADLIGHT_COLORS = [0xfffde0, 0xfff0a0, 0xffd060, 0xffa040, 0xff8820];
 
 export type DistrictRange = { readonly startDeg: number; readonly endDeg: number; readonly mass?: number };
 
+type CarAppearance = { halfLen: number; headColor: number };
+
+// Cars are baked to a small set of textures (5 halfLen buckets × 5 head colors)
+// rendered once via Renderer.generateTexture. Each Car is then a single Sprite
+// — collapses the previous 1 Container + 5 Graphics per car (~3000 scene-graph
+// nodes across all actor layers) into one Sprite per car.
+let _renderer: Renderer | null = null;
+const _carTextureCache = new Map<string, Texture>();
+
+export function initCarTextures(renderer: Renderer): void {
+  _renderer = renderer;
+}
+
+function carTextureKey(app: CarAppearance): string {
+  return `${app.halfLen}|${app.headColor.toString(16)}`;
+}
+
+function getCarTexture(app: CarAppearance): Texture {
+  const key = carTextureKey(app);
+  const cached = _carTextureCache.get(key);
+  if (cached) return cached;
+  if (!_renderer) throw new Error('initCarTextures(renderer) must be called before constructing Cars');
+
+  const { halfLen, headColor } = app;
+  const g = new Container();
+  g.addChild(new Graphics().rect(-halfLen, -0.5, halfLen * 2, 1).fill(0x111111));
+  g.addChild(new Graphics().circle( halfLen, 0, 1.5).fill({ color: headColor, alpha: 0.12 }));
+  g.addChild(new Graphics().circle(-halfLen, 0, 1.0).fill({ color: 0xff2020, alpha: 0.10 }));
+  g.addChild(new Graphics().circle( halfLen, 0, 0.4).fill(headColor));
+  g.addChild(new Graphics().circle(-halfLen, 0, 0.3).fill(0xff2020));
+
+  // resolution: 4 keeps the sub-pixel features (0.4px radius headlights) sharp
+  // when zoomed in.
+  const texture = _renderer.generateTexture({ target: g, resolution: 4 });
+  g.destroy({ children: true });
+  _carTextureCache.set(key, texture);
+  return texture;
+}
+
 export type ActorLayerConfig = {
   motionScale:  number;
   yMotionScale: number;
@@ -22,18 +61,10 @@ export type ActorLayerConfig = {
   layerKey?:    string;
 };
 
-type CarAppearance = { halfLen: number; headColor: number };
-
-function makeCar(app: CarAppearance): Container {
-  const { halfLen, headColor } = app;
-  const c = new Container();
-  const body      = new Graphics().rect(-halfLen, -0.5, halfLen * 2, 1).fill(0x111111);
-  const frontGlow = new Graphics().circle(halfLen, 0, 1.5).fill({ color: headColor, alpha: 0.12 });
-  const tailGlow  = new Graphics().circle(-halfLen, 0, 1).fill({ color: 0xff2020, alpha: 0.10 });
-  const front     = new Graphics().circle(halfLen, 0, 0.4).fill(headColor);
-  const tail      = new Graphics().circle(-halfLen, 0, 0.3).fill(0xff2020);
-  c.addChild(body, frontGlow, tailGlow, front, tail);
-  return c;
+function makeCar(app: CarAppearance): Sprite {
+  const s = new Sprite(getCarTexture(app));
+  s.anchor.set(0.5);
+  return s;
 }
 
 class Car {
@@ -41,7 +72,7 @@ class Car {
   y: number;
   vDeg = 0;
   destDeg: number;
-  readonly gfx: Container;
+  readonly gfx: Sprite;
   private speed: number;
   private dirSign = 1;
   district: DistrictRange | null;
@@ -70,7 +101,9 @@ class Car {
     this.y          = SURFACE_Y;
     this.destDeg    = this.deg;
     this.speed      = 0.12 + Math.random() * 0.18;
-    const halfLen   = 2 + Math.random() ** 2 * 4;
+    // Discretise halfLen to integers in [2, 6] so we get 5 buckets × 5 head
+    // colors = 25 baked car textures total. Pixi batches sprites by texture.
+    const halfLen   = Math.round(2 + Math.random() ** 2 * 4);
     const headColor = HEADLIGHT_COLORS[Math.floor(Math.random() * HEADLIGHT_COLORS.length)];
     this.gfx        = makeCar({ halfLen, headColor });
     this.pickNewDest();

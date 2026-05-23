@@ -3,7 +3,6 @@ import { type RNG, chance, randInt, randRange } from "../rng";
 import { drawBuildingDecorations } from "./decorations";
 
 export type { RNG };
-export type Animator = { update(tick: number): void };
 
 // Registry for dynamic light color updates via tinting
 const _warmGfxRefs: WeakRef<Graphics>[] = [];
@@ -35,8 +34,6 @@ export type BuildingCanvas = {
   glows:     Graphics;
   warm:      Graphics;
   cool:      Graphics;
-  fwarm:     Graphics[];
-  fcool:     Graphics[];
 };
 
 export type BuildingTheme = {
@@ -131,7 +128,7 @@ export type SliceContext = {
 
 // ---------- canvas lifecycle ----------
 
-export function makeCanvas(flickerGroups = 0): BuildingCanvas {
+export function makeCanvas(): BuildingCanvas {
   return {
     bodies:    new Graphics(),
     bodyTints: [],
@@ -140,8 +137,6 @@ export function makeCanvas(flickerGroups = 0): BuildingCanvas {
     glows:     new Graphics(),
     warm:      new Graphics(),
     cool:      new Graphics(),
-    fwarm: Array.from({ length: flickerGroups }, () => new Graphics()),
-    fcool: Array.from({ length: flickerGroups }, () => new Graphics()),
   };
 }
 
@@ -181,49 +176,11 @@ export function commitCanvas(root: Container, canvas: BuildingCanvas, theme: Bui
   canvas.cool.tint = coolC;
   _coolGfxRefs.push(new WeakRef(canvas.cool));
   root.addChild(canvas.cool);
-
-  for (const fg of canvas.fwarm) {
-    fg.fill({ color: 0xffffff, alpha: theme.warmAlpha });
-    fg.tint = warmC;
-    _warmGfxRefs.push(new WeakRef(fg));
-    root.addChild(fg);
-  }
-  for (const fg of canvas.fcool) {
-    fg.fill({ color: 0xffffff, alpha: theme.coolAlpha });
-    fg.tint = coolC;
-    _coolGfxRefs.push(new WeakRef(fg));
-    root.addChild(fg);
-  }
-}
-
-export function registerFlickerAnimators(
-  canvas: BuildingCanvas,
-  rng: RNG,
-  animators: Animator[],
-): void {
-  for (let gi = 0; gi < canvas.fwarm.length; gi++) {
-    const fw = canvas.fwarm[gi];
-    const fc = canvas.fcool[gi];
-    const phase = rng() * Math.PI * 2;
-    const speed = 0.03 + rng() * 0.06;
-    animators.push({
-      update(tick) {
-        const v = Math.sin(tick * speed + phase);
-        const a = v > 0.6 ? 0.9 : v > -0.2 ? 0.35 : 0.0;
-        fw.alpha = a;
-        fc.alpha = a;
-      },
-    });
-  }
 }
 
 // ---------- primitives ----------
 
-function pickWindowLayer(canvas: BuildingCanvas, rng: RNG, isWarm: boolean): Graphics {
-  if (canvas.fwarm.length > 0 && chance(rng, 0.03)) {
-    const g = randInt(rng, 0, canvas.fwarm.length - 1);
-    return isWarm ? canvas.fwarm[g] : canvas.fcool[g];
-  }
+function pickWindowLayer(canvas: BuildingCanvas, isWarm: boolean): Graphics {
   return isWarm ? canvas.warm : canvas.cool;
 }
 
@@ -248,7 +205,7 @@ function drawWindowGrid(
     for (let wx = x + padLeft; wx <= x + w - padRight; wx += stepX) {
       if (!chance(rng, density)) continue;
       canvas.glows.rect(wx - 1, wy - 1, 3, 3);
-      pickWindowLayer(canvas, rng, chance(rng, warmChance)).rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
+      pickWindowLayer(canvas, chance(rng, warmChance)).rect(wx + 0.5, wy + 0.5, 0.5, 0.5);
     }
   }
 }

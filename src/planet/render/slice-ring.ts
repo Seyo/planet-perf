@@ -59,17 +59,19 @@ export class SliceRing {
     const { cameraDeg, zoom, viewWidthPx, motionScale, cullPadPx = 150 } = params;
     const halfW = viewWidthPx / 2;
     const ppd = this.basePPD * motionScale; // unzoomed coords; zoom is handled by outer container scale
+    const sliceScreenW = this.degPerSlice * ppd * zoom;
 
     for (const slice of this.slices) {
       const relDeg = normalize180(slice.homeDeg - cameraDeg);
-
-      slice.x = relDeg * ppd;
-
-      // Cull in screen space: apply zoom
-      const screenX = slice.x * zoom;
-      const sliceScreenW = this.degPerSlice * ppd * zoom;
-      slice.visible =
+      const x = relDeg * ppd;
+      const screenX = x * zoom;
+      const visible =
         screenX + sliceScreenW > -halfW - cullPadPx && screenX < halfW + cullPadPx;
+
+      slice.visible = visible;
+      // Skip the transform write for culled slices — their stale x is unread
+      // while invisible, and writing it dirties the cacheAsTexture render group.
+      if (visible) slice.x = x;
     }
   }
 }

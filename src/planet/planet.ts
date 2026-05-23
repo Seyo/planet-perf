@@ -14,7 +14,6 @@ import { makeBackCityFactory, makeBackEmptySliceFactory, makeEmptySliceFactory, 
 import { sliceTaperParams, proportionalTaperParams, type District } from "./render/district-taper";
 export type { TaperConfig, District } from "./render/district-taper";
 export { districtMass } from "./render/district-taper";
-import type { Animator } from "./render/layer-factories";
 import type { BuildingRegistry } from "./render/buildings";
 
 export type WorldState = {
@@ -25,6 +24,7 @@ export type WorldState = {
 };
 
 const INERTIA_FRICTION = 0.95;
+const INERTIA_SNAP_EPS = 1e-3;
 
 const HAZE_COLOR = 0x7a6090;
 
@@ -34,8 +34,6 @@ const MAX_VISIBLE_SLICES_ZOOM_IN = 1;
 
 export class Planet {
   readonly root = new Container(); // we scale + center this
-  readonly animators: Animator[] = [];
-  private tick = 0;
   private world: WorldState = { xDeg: 0, vDeg: 0, cameraY: 0, vY: 0 };
 
   private pointer: PointerX;
@@ -151,8 +149,6 @@ export class Planet {
   }
 
   update(dt: number) {
-    this.tick += dt;
-    for (const a of this.animators) a.update(this.tick);
     for (const al of this.actorLayers) al.update(dt);
     this.stepWorld(dt);
     this.layout();
@@ -200,10 +196,15 @@ export class Planet {
       this.world.vDeg = 0;
     } else {
       this.world.vDeg *= INERTIA_FRICTION;
+      // Snap to 0 below epsilon — geometric decay never reaches 0, so xDeg would
+      // drift by infinitesimal amounts forever, dirtying every slice transform
+      // each frame and invalidating cacheAsTexture render groups.
+      if (Math.abs(this.world.vDeg) < INERTIA_SNAP_EPS) this.world.vDeg = 0;
       this.world.xDeg = this.world.xDeg - this.world.vDeg * dt;
     }
 
     this.world.vY *= INERTIA_FRICTION;
+    if (Math.abs(this.world.vY) < INERTIA_SNAP_EPS) this.world.vY = 0;
     const rawY = this.world.cameraY - this.world.vY * dt;
     const clampedY = this.clampCameraY(rawY);
     if (clampedY !== rawY) this.world.vY = 0;
@@ -296,7 +297,7 @@ export class Planet {
   }
 }
 
-export function makeTaperedFrontLayer(districts: District[], animators?: Animator[], registry?: BuildingRegistry) {
+export function makeTaperedFrontLayer(districts: District[], registry?: BuildingRegistry) {
   const baseColor           = 0x060810;
   const sliceWidthPxAtZoom1 = 120;
   const layerKey            = 'front';
@@ -308,7 +309,7 @@ export function makeTaperedFrontLayer(districts: District[], animators?: Animato
       const { density, maxH } = sliceTaperParams(j, d.sliceCount, d.taperConfig);
       sliceFactoryMap.set(
         (d.startSlice + j) % 72,
-        makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density, maxH, baseColor, registry, layerKey }, animators),
+        makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density, maxH, baseColor, registry, layerKey }),
       );
     }
   }
@@ -317,7 +318,7 @@ export function makeTaperedFrontLayer(districts: District[], animators?: Animato
     const f = sliceFactoryMap.get(i);
     return f ? f(i, deg) : emptyFactory(i, deg);
   };
-  return new SliceLayer(new SliceRing(72, 5, sliceWidthPxAtZoom1, factory), 1.0, 1.0, 1.0);
+  return new SliceLayer(new SliceRing(72, 5, sliceWidthPxAtZoom1, factory, 2), 1.0, 1.0, 1.0);
 }
 
 export type BackCityConfig = {
@@ -382,6 +383,7 @@ export function makeGroundLayer() {
     5,
     120,
     makeGroundSectionFactory({ sliceWidthPxAtZoom1: 120 }),
+    1,
   );
   // Locked to surface on both axes — ground moves with buildings
   return new SliceLayer(ring, 1.0, 1.0, 1.0);
@@ -393,6 +395,7 @@ export function makeShallowCaveLayer() {
     5,
     120,
     makeShallowCaveFactory({ sliceWidthPxAtZoom1: 120 }),
+    1,
   );
   // Slower X parallax (0.96) + slightly slower Y (0.93) → feels one depth deeper
   return new SliceLayer(ring, 0.50, 1.0, 0.93);

@@ -4,15 +4,13 @@ import {
   type RNG,
 } from "./rng";
 import {
-  makeCanvas, commitCanvas, registerFlickerAnimators,
+  makeCanvas, commitCanvas,
   drawBuilding, drawStreetLamps, drawBridge, drawDetailedGreebles, drawSimpleGreebles,
   FRONT_THEME, BACK_THEME,
   BuildingRegistry,
-  type Animator, type BuildingCanvas, type BuildingRect, type BuildingTheme, type SliceContext, type Tier,
+  type BuildingCanvas, type BuildingRect, type BuildingTheme, type SliceContext, type Tier,
 } from "./buildings";
 import type { SliceFactory } from "./slice-ring";
-
-export type { Animator } from "./buildings";
 
 function darken(color: number, amount: number): number {
   const r = (color >> 16) & 0xff;
@@ -49,7 +47,7 @@ type FactoryOpts = {
 };
 
 // Front: skyscrapers with glowing 1x1px windows
-export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator[]): SliceFactory {
+export function makeFrontBuildingFactory(opts: FactoryOpts): SliceFactory {
   const {
     sliceWidthPxAtZoom1,
     baseColor = 0x060810,
@@ -69,7 +67,7 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
     const theme: BuildingTheme = { ...FRONT_THEME, baseColor };
 
     // One shared canvas for all buildings — avoids 7-8 Graphics objects per building.
-    const buildingCanvas = makeCanvas(3);
+    const buildingCanvas = makeCanvas();
     const allTiers: Tier[] = [];
 
     // Pass 1: low-rise fillers (always present, keeps ground covered)
@@ -114,12 +112,11 @@ export function makeFrontBuildingFactory(opts: FactoryOpts, animators?: Animator
       })));
     }
 
-    // Commit all buildings in a single batch, then register flicker animators once.
+    // Commit all buildings in a single batch.
     commitCanvas(root, buildingCanvas, theme);
-    if (animators) registerFlickerAnimators(buildingCanvas, rng, animators);
 
     // Slice-level features on a single canvas painted ON TOP of all buildings.
-    const sliceCanvas = makeCanvas(0);
+    const sliceCanvas = makeCanvas();
     const frontCtx: SliceContext = { canvas: sliceCanvas, rng, sliceW: sliceWidthPxAtZoom1, yBase };
     drawStreetLamps(frontCtx);
     if (chance(rng, 0.28)) {
@@ -197,7 +194,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
     const rng = mulberry32(hashSeed(i, salt));
     const theme: BuildingTheme = { ...BACK_THEME, baseColor };
     const built: BuildingRect[] = [];
-    const buildingCanvas = makeCanvas(0);
+    const buildingCanvas = makeCanvas();
     const ctx: BackCityCtx = { canvas: buildingCanvas, rng, built, tiers: [], sliceW: sliceWidthPxAtZoom1, yBase };
 
     buildBackFillers(ctx, randInt(rng, 2, 4));
@@ -211,7 +208,7 @@ export function makeBackCityFactory(opts: FactoryOpts): SliceFactory {
 
     commitCanvas(root, buildingCanvas, theme);
 
-    const sliceCanvas = makeCanvas(0);
+    const sliceCanvas = makeCanvas();
     const backCtx: SliceContext = { canvas: sliceCanvas, rng, sliceW: sliceWidthPxAtZoom1, yBase };
     const bridgeCount = randInt(rng, 1, 2);
     for (let br = 0; br < bridgeCount; br++) {

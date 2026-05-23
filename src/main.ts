@@ -11,7 +11,7 @@ import {
   districtMass,
   type District,
 } from "./planet/planet";
-import { makeActorLayer, ActorLayer, type ActorLayerConfig, type DistrictRange } from "./planet/render/actor-layer";
+import { makeActorLayer, initCarTextures, ActorLayer, type ActorLayerConfig, type DistrictRange } from "./planet/render/actor-layer";
 import { makeShuttleLayer, ShuttleLayer, distanceFlightPlan, type FlightPlanFn } from "./planet/render/actors";
 import { LayoutPanel } from "./debug/layout-panel";
 import { DebugPanel } from "./debug/debug-panel";
@@ -56,14 +56,17 @@ try {
 
 document.body.appendChild(app.canvas);
 
+initCarTextures(app.renderer);
+
 const planet = new Planet(app);
 const registry = new BuildingRegistry();
 const boundsLayerInfos: BoundsLayerInfo[] = [];
 
 // Back-to-front: first added = furthest back
 let activeSkyLayer: SliceLayer = makeSkyLayer(PALETTES[DEFAULT_PALETTE_IDX].skyGradient);
-planet.addLayer(activeSkyLayer,         { behindAll: true });
-planet.addLayer(makeShallowCaveLayer(), { behindAll: true });
+const shallowCaveLayer: SliceLayer = makeShallowCaveLayer();
+planet.addLayer(activeSkyLayer,    { behindAll: true });
+planet.addLayer(shallowCaveLayer,  { behindAll: true });
 
 // Background city layers — far to near, uniform motionScale steps including the front layer at 1.0
 const BACK_LAYER_COUNT  = 25;
@@ -158,9 +161,15 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   planet.addOverlay(hazeContainer, motionScale);
 }
 
-planet.addLayer(makeGroundLayer(), { behindAll: true });
-let activeFrontLayer = makeTaperedFrontLayer(getDistricts(), planet.animators, registry);
+const groundLayer = makeGroundLayer();
+planet.addLayer(groundLayer, { behindAll: true });
+let activeFrontLayer = makeTaperedFrontLayer(getDistricts(), registry);
 planet.addLayer(activeFrontLayer, { asInteractionLayer: true });
+
+// Baked layers retint on light-palette change via slice.updateCacheTexture().
+// All cacheAsTexture-enabled rings must be in this list — including the
+// freshly-baked front, ground and shallow-cave layers.
+bakedLayers.push(shallowCaveLayer, groundLayer, activeFrontLayer);
 const frontActorCfg: ActorLayerConfig = { motionScale: 1.0, yMotionScale: 1.0, registry, layerKey: 'front' };
 const frontActorLayer = makeActorLayer(frontActorCfg, ACTOR_DISTRICTS);
 actorEntries.push({ layer: frontActorLayer, config: frontActorCfg });
@@ -286,9 +295,10 @@ function applyDistricts(districts: District[]): void {
   const fKey = frontKey(districts);
   if (fKey !== lastFrontKey) {
     lastFrontKey = fKey;
-    planet.animators.length = 0;
-    const nextFront = makeTaperedFrontLayer(districts, planet.animators, registry);
+    const nextFront = makeTaperedFrontLayer(districts, registry);
     planet.replaceLayer(activeFrontLayer, nextFront);
+    const bIdx = bakedLayers.indexOf(activeFrontLayer);
+    if (bIdx !== -1) bakedLayers[bIdx] = nextFront;
     activeFrontLayer = nextFront;
   }
 
