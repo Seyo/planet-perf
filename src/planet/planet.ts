@@ -307,7 +307,7 @@ export function makeTaperedFrontLayer(districts: District[], animators?: Animato
     for (let j = 0; j < d.sliceCount; j++) {
       const { density, maxH } = sliceTaperParams(j, d.sliceCount, d.taperConfig);
       sliceFactoryMap.set(
-        d.startSlice + j,
+        (d.startSlice + j) % 72,
         makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density, maxH, baseColor, registry, layerKey }, animators),
       );
     }
@@ -361,7 +361,7 @@ export function makeBackCityLayer(config: BackCityConfig = {}, districts?: Distr
         { density, maxH }, j, d.sliceCount, d.taperConfig,
       );
       sliceFactoryMap.set(
-        d.startSlice + j,
+        (d.startSlice + j) % 72,
         makeBackCityFactory({ sliceWidthPxAtZoom1: sliceWidth, baseColor, density: dv, minH, maxH: mH, salt, underground, undergroundDim, registry, layerKey }),
       );
     }
