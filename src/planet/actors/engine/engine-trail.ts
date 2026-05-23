@@ -52,6 +52,7 @@ export class EngineTrail {
   private readonly buf: TrailPoint[];
   private head  = 0;
   private count = 0;
+  private clean = true;
 
   constructor(maxPoints: number) {
     this.buf = Array.from({ length: maxPoints }, () => ({ deg: 0, y: 0 }));
@@ -69,13 +70,19 @@ export class EngineTrail {
 
   reset(): void { this.head = 0; this.count = 0; }
 
+  ensureClear(gfx: Graphics): void {
+    if (!this.clean) { gfx.clear(); this.clean = true; }
+  }
+
   draw(gfx: Graphics, view: DrawView, cfg: EngineConfig): void {
     const { anchorDeg, anchorY, speedPx, fadeFactor = 1 } = view;
-    gfx.clear();
-    if (this.count < 2) return;
+    if (this.count < 2) { this.ensureClear(gfx); return; }
 
     const visLen = Math.min(this.count, Math.floor(speedPx * cfg.trailSpeedFactor));
-    if (visLen < 2) return;
+    if (visLen < 2) { this.ensureClear(gfx); return; }
+
+    gfx.clear();
+    this.clean = false;
 
     const len = this.buf.length;
     for (let i = 0; i < visLen - 1; i++) {

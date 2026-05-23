@@ -44,12 +44,12 @@ class Car {
   readonly gfx: Container;
   private speed: number;
   private dirSign = 1;
-  private readonly district: DistrictRange | null;
+  district: DistrictRange | null;
   private readonly registry: BuildingRegistry | null;
   private readonly layerKey: string;
   private readonly layerPpd: number;
-  private readonly startSlice: number;
-  private readonly endSlice: number;
+  private startSlice: number;
+  private endSlice: number;
   onScreen = false;
 
   constructor(
@@ -134,6 +134,25 @@ class Car {
     }
     this.gfx.rotation = this.dirSign > 0 ? 0 : Math.PI;
   }
+
+  reassign(district: DistrictRange): void {
+    this.district   = district;
+    this.startSlice = Math.floor(district.startDeg / DEGS_PER_SLICE);
+    this.endSlice   = Math.floor(district.endDeg   / DEGS_PER_SLICE);
+    this.deg        = this.clampDeg(this.deg);
+    this.destDeg    = this.clampDeg(this.destDeg);
+    this.recomputeVelocity();
+  }
+}
+
+function carsPerSlice(d: DistrictRange): number {
+  const t = Math.sqrt(Math.min(1, d.mass ?? CARS_MASS_FALLBACK));
+  return CARS_PER_SLICE_MIN + Math.round(t * (CARS_PER_SLICE_MAX - CARS_PER_SLICE_MIN));
+}
+
+function desiredCarCount(d: DistrictRange): number {
+  const sliceCount = Math.max(1, Math.round((d.endDeg - d.startDeg) / DEGS_PER_SLICE));
+  return sliceCount * carsPerSlice(d);
 }
 
 export class ActorLayer {
@@ -149,15 +168,49 @@ export class ActorLayer {
     for (const car of this.cars) this.container.addChild(car.gfx);
   }
 
-  reset(districts: readonly DistrictRange[], config: ActorLayerConfig): void {
+  reconcile(districts: readonly DistrictRange[], config: ActorLayerConfig): void {
+    const oldByStart  = new Map<number, Car[]>();
+    const noDistrict: Car[] = [];
     for (const car of this.cars) {
-      this.container.removeChild(car.gfx);
-      car.gfx.destroy({ children: true });
+      if (!car.district) { noDistrict.push(car); continue; }
+      const startSlice = Math.floor(car.district.startDeg / DEGS_PER_SLICE);
+      let list = oldByStart.get(startSlice);
+      if (!list) { list = []; oldByStart.set(startSlice, list); }
+      list.push(car);
     }
-    this.cars.splice(0);
-    const newCars = districts.length > 0 ? makeCarsForDistricts(config, districts) : [];
-    for (const car of newCars) this.container.addChild(car.gfx);
-    this.cars.push(...newCars);
+
+    const nextCars: Car[] = [];
+    const registry        = config.registry ?? null;
+    const layerKey        = config.layerKey ?? '';
+
+    for (const d of districts) {
+      const startSlice = Math.floor(d.startDeg / DEGS_PER_SLICE);
+      const desired    = desiredCarCount(d);
+      const existing   = oldByStart.get(startSlice) ?? [];
+      oldByStart.delete(startSlice);
+
+      const reuse = Math.min(existing.length, desired);
+      for (let i = 0; i < reuse; i++) {
+        existing[i].reassign(d);
+        nextCars.push(existing[i]);
+      }
+      for (let i = reuse; i < existing.length; i++) this.destroyCar(existing[i]);
+      for (let i = reuse; i < desired; i++) {
+        const car = new Car(config.motionScale, registry, layerKey, d);
+        this.container.addChild(car.gfx);
+        nextCars.push(car);
+      }
+    }
+
+    for (const list of oldByStart.values()) for (const car of list) this.destroyCar(car);
+    for (const car of noDistrict) this.destroyCar(car);
+
+    this.cars.splice(0, this.cars.length, ...nextCars);
+  }
+
+  private destroyCar(car: Car): void {
+    this.container.removeChild(car.gfx);
+    car.gfx.destroy({ children: true });
   }
 
   update(dt: number) {
@@ -183,12 +236,9 @@ export class ActorLayer {
 function makeCarsForDistricts(config: ActorLayerConfig, districts: readonly DistrictRange[]): Car[] {
   const registry = config.registry ?? null;
   const layerKey = config.layerKey ?? '';
-  return districts.flatMap(d => {
-    const sliceCount   = Math.max(1, Math.round((d.endDeg - d.startDeg) / DEGS_PER_SLICE));
-    const t            = Math.sqrt(Math.min(1, d.mass ?? CARS_MASS_FALLBACK));
-    const carsPerSlice = CARS_PER_SLICE_MIN + Math.round(t * (CARS_PER_SLICE_MAX - CARS_PER_SLICE_MIN));
-    return Array.from({ length: sliceCount * carsPerSlice }, () => new Car(config.motionScale, registry, layerKey, d));
-  });
+  return districts.flatMap(d =>
+    Array.from({ length: desiredCarCount(d) }, () => new Car(config.motionScale, registry, layerKey, d)),
+  );
 }
 
 export function makeActorLayer(config: ActorLayerConfig, districts?: readonly DistrictRange[]): ActorLayer {

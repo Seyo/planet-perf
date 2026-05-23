@@ -10,10 +10,12 @@ const _warmGfxRefs: WeakRef<Graphics>[] = [];
 const _coolGfxRefs: WeakRef<Graphics>[] = [];
 
 function applyTint(refs: WeakRef<Graphics>[], color: number): void {
-  for (const ref of refs) {
-    const g = ref.deref();
-    if (g && !g.destroyed) g.tint = color;
+  let w = 0;
+  for (let r = 0; r < refs.length; r++) {
+    const g = refs[r].deref();
+    if (g && !g.destroyed) { g.tint = color; refs[w++] = refs[r]; }
   }
+  refs.length = w;
 }
 
 export function setLightColors(warm: number, cool: number): void {

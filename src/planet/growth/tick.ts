@@ -1,9 +1,11 @@
 import { districtSlices, TOTAL_SLICES, type DistrictGrowthState, type GrowthConfig, type GrowthSimState } from './types';
 
+const claimedScratch = new Set<number>();
+
 function buildClaimed(districts: DistrictGrowthState[]): Set<number> {
-  const claimed = new Set<number>();
-  for (const d of districts) for (const s of districtSlices(d)) claimed.add(s);
-  return claimed;
+  claimedScratch.clear();
+  for (const d of districts) for (const s of districtSlices(d)) claimedScratch.add(s);
+  return claimedScratch;
 }
 
 function newEdgePair(d: DistrictGrowthState): [number, number] {

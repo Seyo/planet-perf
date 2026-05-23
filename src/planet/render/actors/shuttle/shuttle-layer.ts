@@ -200,7 +200,8 @@ class Debris {
   private readonly fizzleFrames: number | null;
   private readonly intensity: number;
   private readonly trailWidth: number;
-  private readonly trail: Array<{ deg: number; y: number }>;
+  private readonly trailDeg: Float64Array;
+  private readonly trailY:   Float64Array;
   private trailHead  = 0;
   private trailCount = 0;
   readonly gfx: Container;
@@ -215,10 +216,8 @@ class Debris {
     this.fizzleFrames = piece.fizzleFrames;
     this.intensity    = piece.intensity;
     this.trailWidth   = piece.trailWidth;
-    this.trail = Array.from(
-      { length: DEFAULT_EXPLOSION_CONFIG.debrisTrailPoints },
-      () => ({ deg: 0, y: 0 }),
-    );
+    this.trailDeg = new Float64Array(DEFAULT_EXPLOSION_CONFIG.debrisTrailPoints);
+    this.trailY   = new Float64Array(DEFAULT_EXPLOSION_CONFIG.debrisTrailPoints);
 
     this.trailGfx = new Graphics();
     this.bodyGfx  = new Graphics()
@@ -243,15 +242,14 @@ class Debris {
       return;
     }
 
-    const len = this.trail.length;
+    const len = this.trailDeg.length;
     this.vY  += DEFAULT_EXPLOSION_CONFIG.debrisGravity * tick.dt;
     this.deg  = ((this.deg + this.vDeg * tick.dt) % 360 + 360) % 360;
     this.y   += this.vY * tick.dt;
 
     this.trailHead = (this.trailHead - 1 + len) % len;
-    const slot = this.trail[this.trailHead];
-    slot.deg = this.deg;
-    slot.y   = this.y;
+    this.trailDeg[this.trailHead] = this.deg;
+    this.trailY[this.trailHead]   = this.y;
     if (this.trailCount < len) this.trailCount++;
 
     this.bodyGfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
@@ -278,19 +276,19 @@ class Debris {
     const tipFade  = clamp((fizzleAt - this.age) / FIZZLE_FADE_FRAMES, 0, 1);
     this.bodyGfx.alpha = (1 - lingerProgress) * tipFade;
 
-    const len    = this.trail.length;
+    const len    = this.trailDeg.length;
     const visLen = this.trailCount;
     const tScale = Math.max(1, visLen - 1);
     for (let i = 0; i < visLen - 1; i++) {
       const spawnFade = clamp((fizzleAt - this.age + i) / FIZZLE_FADE_FRAMES, 0, 1);
-      const ptA  = this.trail[(this.trailHead + i)     % len];
-      const ptB  = this.trail[(this.trailHead + i + 1) % len];
+      const idxA = (this.trailHead + i)     % len;
+      const idxB = (this.trailHead + i + 1) % len;
       const t    = Math.max(0, 1 - i / tScale - lingerProgress);
       const color = getDebrisTrailColor(t);
-      const ax   = normalize180(ptA.deg - this.deg) * view.ppd;
-      const ay   = ptA.y - this.y;
-      const bx   = normalize180(ptB.deg - this.deg) * view.ppd;
-      const by   = ptB.y - this.y;
+      const ax   = normalize180(this.trailDeg[idxA] - this.deg) * view.ppd;
+      const ay   = this.trailY[idxA] - this.y;
+      const bx   = normalize180(this.trailDeg[idxB] - this.deg) * view.ppd;
+      const by   = this.trailY[idxB] - this.y;
 
       const glow = getDebrisGlowAlpha(t) * spawnFade * this.intensity;
       if (glow > 0.005) {
@@ -613,7 +611,7 @@ class Shuttle {
     this.callout.visible = view.showCallout;
     this.debugGfx.visible = view.showCallout;
     if (view.showCallout) this.drawDebugInfo(view);
-    if (this.phase === 'grounded') { this.trailGfx.clear(); return; }
+    if (this.phase === 'grounded') { this.engineTrail.ensureClear(this.trailGfx); return; }
 
     const dying     = this.phase === 'dying';
     const dyingFade = this.computeDyingFade();
@@ -708,21 +706,30 @@ export class ShuttleLayer {
     this.explosions.push(exp);
   }
 
+  private pickRandomFlying(): Shuttle | null {
+    let flyingCount = 0;
+    for (const s of this.shuttles) if (s.isFlying) flyingCount++;
+    if (flyingCount === 0) return null;
+    let pick = Math.floor(Math.random() * flyingCount);
+    for (const s of this.shuttles) {
+      if (!s.isFlying) continue;
+      if (pick === 0) return s;
+      pick--;
+    }
+    return null;
+  }
+
   // Programmatically detonate a shuttle. If index is given, targets that shuttle;
   // otherwise picks a random currently-flying shuttle.
   triggerExplosion(index?: number) {
-    if (index !== undefined) {
-      this.shuttles[index]?.triggerExplosion();
-    } else {
-      const flying = this.shuttles.filter(s => s.isFlying);
-      if (flying.length) flying[Math.floor(Math.random() * flying.length)].triggerExplosion();
-    }
+    if (index !== undefined) this.shuttles[index]?.triggerExplosion();
+    else this.pickRandomFlying()?.triggerExplosion();
   }
 
   annihilate(): void {
-    const flying = this.shuttles.filter(s => s.isFlying);
     let delay = 0;
-    for (const s of flying) {
+    for (const s of this.shuttles) {
+      if (!s.isFlying) continue;
       delay += 250;
       setTimeout(() => { if (s.isFlying) s.triggerExplosion(); }, delay);
     }

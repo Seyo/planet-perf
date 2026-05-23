@@ -94,9 +94,10 @@ function computeActorDistricts(districts: District[]) {
 }
 
 const ACTOR_DISTRICTS = computeActorDistricts(getDistricts());
+const INITIAL_BOUNDARY_KEY = districtBoundaryKey(activeDistricts);
 
 type HazeEntry    = { container: Container; alpha: number; bottomAlpha: number };
-type BackEntry    = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer };
+type BackEntry    = { layer: SliceLayer; rebuild: (districts: District[]) => SliceLayer; lastBuiltSignature: string };
 type ActorEntry   = { layer: ActorLayer; config: ActorLayerConfig };
 type ShuttleEntry = { layer: ShuttleLayer; motionScale: number; yMotionScale: number; label: string; planFn: FlightPlanFn };
 
@@ -126,7 +127,7 @@ for (let i = 0; i < BACK_LAYER_COUNT; i++) {
   };
   const rebuild = (districts: District[]) => makeBackCityLayer(layerCfg, districts);
   const backLayer = rebuild(getDistricts());
-  backEntries.push({ layer: backLayer, rebuild });
+  backEntries.push({ layer: backLayer, rebuild, lastBuiltSignature: INITIAL_BOUNDARY_KEY });
   bakedLayers.push(backLayer);
   planet.addLayer(backLayer, { behindAll: true });
   if (hasActors) {
@@ -190,6 +191,9 @@ function setLayerRange(back: number, front: number): void {
     const vis = i >= back && i <= front;
     backEntries[i].layer.container.visible = vis;
     hazeEntries[i].container.visible       = vis;
+    if (vis && backEntries[i].lastBuiltSignature !== lastBoundaryKey) {
+      pendingBackRebuilds.add(i);
+    }
   }
   const frontVis = front >= BACK_LAYER_COUNT;
   activeFrontLayer.container.visible                    = frontVis;
@@ -224,12 +228,50 @@ function districtBoundaryKey(districts: District[]): string {
   }).join('|');
 }
 
-let lastBoundaryKey = '';
+function frontKey(districts: District[]): string {
+  return districts.map(d => {
+    const tc = d.taperConfig;
+    const cd = tc.centerDensity.toFixed(2);
+    const ed = tc.edgeDensity.toFixed(2);
+    const cH = Math.round(tc.centerMaxH);
+    const eH = Math.round(tc.edgeMaxH);
+    return `${d.startSlice}:${d.sliceCount}:${cd}:${ed}:${cH}:${eH}:${tc.shape}`;
+  }).join('|');
+}
+
+let lastBoundaryKey = districtBoundaryKey(activeDistricts);
+let lastFrontKey    = frontKey(activeDistricts);
+
+const pendingBackRebuilds = new Set<number>();
+const BACK_REBUILD_BUDGET_MS = 4;
+
+function scheduleBackRebuilds(): void {
+  for (let i = 0; i < backEntries.length; i++) {
+    const entry = backEntries[i];
+    if (entry.lastBuiltSignature === lastBoundaryKey) continue;
+    if (!entry.layer.container.visible) continue;
+    pendingBackRebuilds.add(i);
+  }
+}
+
+function drainBackRebuildQueue(): void {
+  if (pendingBackRebuilds.size === 0) return;
+  const districts = activeDistricts;
+  const key       = lastBoundaryKey;
+  const indices   = [...pendingBackRebuilds].sort((a, b) => b - a);
+  const start     = performance.now();
+  for (const i of indices) {
+    if (performance.now() - start >= BACK_REBUILD_BUDGET_MS) break;
+    rebuildBackEntry(backEntries[i], districts);
+    backEntries[i].lastBuiltSignature = key;
+    pendingBackRebuilds.delete(i);
+  }
+}
 
 function applyStructuralLayers(districts: District[]): void {
   const actorDists = computeActorDistricts(districts);
-  for (const entry of backEntries) rebuildBackEntry(entry, districts);
-  for (const entry of actorEntries) entry.layer.reset(actorDists, entry.config);
+  scheduleBackRebuilds();
+  for (const entry of actorEntries) entry.layer.reconcile(actorDists, entry.config);
   const shuttlesEnabled = shuttlesActive(districts);
   for (const e of shuttleEntries) {
     if (!shuttlesEnabled) { e.layer.clearShuttles(); e.layer.container.visible = false; }
@@ -241,10 +283,14 @@ function applyDistricts(districts: District[]): void {
   activeDistricts = districts;
   districtLabelLayer.setDistricts(districts);
 
-  planet.animators.length = 0;
-  const nextFront = makeTaperedFrontLayer(districts, planet.animators, registry);
-  planet.replaceLayer(activeFrontLayer, nextFront);
-  activeFrontLayer = nextFront;
+  const fKey = frontKey(districts);
+  if (fKey !== lastFrontKey) {
+    lastFrontKey = fKey;
+    planet.animators.length = 0;
+    const nextFront = makeTaperedFrontLayer(districts, planet.animators, registry);
+    planet.replaceLayer(activeFrontLayer, nextFront);
+    activeFrontLayer = nextFront;
+  }
 
   const key = districtBoundaryKey(districts);
   if (key !== lastBoundaryKey) { lastBoundaryKey = key; applyStructuralLayers(districts); }
@@ -423,6 +469,7 @@ if (autopanParam !== null) {
 if (!params.has('debug')) debugPanel.hide();
 
 app.ticker.add((ticker) => {
+  drainBackRebuildQueue();
   planet.update(ticker.deltaTime);
   debugPanel.update({
     xDeg:      planet.xDeg,
