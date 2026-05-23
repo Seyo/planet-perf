@@ -22,6 +22,7 @@ import { EngineTesterPanel }    from "./debug/engine-tester";
 import { TestBlockLayer }       from "./planet/actors/engine";
 import { SliceLineOverlay, YGridOverlay } from "./debug/screen-overlays";
 import { BuildingBoundsOverlay, type BoundsLayerInfo } from "./debug/building-bounds-overlay";
+import { DistrictLabelLayer } from "./planet/render/district-label-layer";
 import { PALETTES, LIGHT_PALETTES, THEMES } from "./debug/palettes";
 import type { Palette, LightPalette } from "./debug/palettes";
 import { setLightColors, BuildingRegistry } from "./planet/render/buildings";
@@ -79,6 +80,8 @@ function shuttlesActive(districts: District[]): boolean {
 
 const layoutPanel = new LayoutPanel();
 let activeDistricts: District[] = layoutPanel.getDistricts();
+const districtLabelLayer = new DistrictLabelLayer();
+districtLabelLayer.setDistricts(activeDistricts);
 
 function getDistricts(): District[] { return activeDistricts; }
 
@@ -214,13 +217,17 @@ function rebuildShuttleEntry(e: ShuttleEntry, actorDists: readonly DistrictRange
   if (i !== -1) shuttleLayers[i] = next;
 }
 
-function applyDistricts(districts: District[]): void {
-  activeDistricts = districts;
+function districtBoundaryKey(districts: District[]): string {
+  return districts.map(d => {
+    const densityTier = (Math.round(d.taperConfig.centerDensity * 4) / 4).toFixed(2);
+    return `${d.startSlice}:${d.sliceCount}:${densityTier}`;
+  }).join('|');
+}
+
+let lastBoundaryKey = '';
+
+function applyStructuralLayers(districts: District[]): void {
   const actorDists = computeActorDistricts(districts);
-  planet.animators.length = 0;
-  const nextFront = makeTaperedFrontLayer(districts, planet.animators, registry);
-  planet.replaceLayer(activeFrontLayer, nextFront);
-  activeFrontLayer = nextFront;
   for (const entry of backEntries) rebuildBackEntry(entry, districts);
   for (const entry of actorEntries) entry.layer.reset(actorDists, entry.config);
   const shuttlesEnabled = shuttlesActive(districts);
@@ -228,6 +235,19 @@ function applyDistricts(districts: District[]): void {
     if (!shuttlesEnabled) { e.layer.clearShuttles(); e.layer.container.visible = false; }
     else rebuildShuttleEntry(e, actorDists);
   }
+}
+
+function applyDistricts(districts: District[]): void {
+  activeDistricts = districts;
+  districtLabelLayer.setDistricts(districts);
+
+  planet.animators.length = 0;
+  const nextFront = makeTaperedFrontLayer(districts, planet.animators, registry);
+  planet.replaceLayer(activeFrontLayer, nextFront);
+  activeFrontLayer = nextFront;
+
+  const key = districtBoundaryKey(districts);
+  if (key !== lastBoundaryKey) { lastBoundaryKey = key; applyStructuralLayers(districts); }
 }
 
 // --- screen-space debug overlays ---
@@ -240,6 +260,7 @@ app.stage.addChild(yGridOverlay.container);
 
 const boundsOverlay = new BuildingBoundsOverlay();
 app.stage.addChild(boundsOverlay.container);
+app.stage.addChild(districtLabelLayer.container);
 
 // --- debug panel ---
 
@@ -264,6 +285,7 @@ debugPanel.registerToggle('y-grid',         'Y grid',           yGridOverlay.con
 debugPanel.registerToggle('building-bounds','Building bounds',  boundsOverlay.container);
 debugPanel.registerToggle('shuttle-info',   'Shuttle info',     shuttleDebugToggle);
 debugPanel.registerToggle('haze',           'Haze',             hazeToggle);
+debugPanel.registerToggle('district-labels','District labels',  districtLabelLayer.container);
 
 function applyPalette(p: Palette): void {
   app.renderer.background.color = p.backgroundColor;
@@ -415,4 +437,5 @@ app.ticker.add((ticker) => {
   sliceOverlay.update(planet.xDeg, planet.zoomLevel, app.renderer.width);
   yGridOverlay.update(planet.cameraY, planet.zoomLevel, app.renderer.width, app.renderer.height);
   boundsOverlay.update(planet.xDeg, planet.zoomLevel, app.renderer.width, planet.cameraY, boundsLayerInfos, registry);
+  districtLabelLayer.layout(planet.xDeg, planet.zoomLevel, app.renderer.width, planet.cameraY);
 });

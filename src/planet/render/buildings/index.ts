@@ -1,5 +1,5 @@
 export type {
-  BuildingCanvas, BuildingTheme, BuildingRect, BuildingOpts,
+  BuildingCanvas, BuildingTheme, BuildingRect,
   Animator, Tier, SliceContext, Archetype,
 } from './core';
 export {

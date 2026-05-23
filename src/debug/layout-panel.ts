@@ -1,8 +1,10 @@
 import type { District, TaperConfig } from '../planet/planet';
+import { tick, seedDistricts, toDistricts } from '../planet/growth';
+import type { GrowthSimState, GrowthConfig } from '../planet/growth';
 
 type SliderSpec     = { label: string; value: number; min: number; max: number; step: number };
 type SingleState    = { startSlice: number; sliceCount: number; taperConfig: TaperConfig };
-type LayoutDef      = { id: string; label: string; build(): District[]; renderControls(el: HTMLElement, emit: () => void): void };
+type LayoutDef      = { id: string; label: string; build(): District[]; renderControls(el: HTMLElement, emit: () => void): void; teardown?(): void };
 type TaperNumericKey = keyof Omit<TaperConfig, 'shape'>;
 
 const TOTAL_SLICES = 72;
@@ -144,12 +146,63 @@ function renderSingleControls(el: HTMLElement, state: SingleState, emit: () => v
   appendTaperSliders(el, state, emit);
 }
 
+const DEFAULT_GROWTH_CONFIG: GrowthConfig = {
+  growthRate: 0.05, expansionThreshold: 1.0, maxSlicesPerDistrict: 71, densificationCap: 1.0,
+};
+
+function makeResetButton(onClick: () => void): HTMLElement {
+  const btn = document.createElement('button');
+  btn.textContent = 'Reset';
+  Object.assign(btn.style, {
+    marginTop: '6px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '9px',
+    padding: '2px 8px', borderRadius: '2px', color: '#fff',
+    border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)',
+  });
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function makeGrowthLayout(): LayoutDef {
+  const cfg: GrowthConfig = { ...DEFAULT_GROWTH_CONFIG };
+  let districtCount = 3;
+  let seed = 0;
+  let tickMs = 1000;
+  let state: GrowthSimState = { districts: seedDistricts(3, 0) };
+  let tickerId: ReturnType<typeof setInterval> | null = null;
+
+  function renderControls(el: HTMLElement, emit: () => void): void {
+    function reset(): void { state = { districts: seedDistricts(districtCount, seed) }; emit(); }
+    function restartTicker(): void {
+      if (tickerId !== null) clearInterval(tickerId);
+      tickerId = setInterval(() => { state = tick(state, cfg); emit(); }, tickMs);
+    }
+
+    el.appendChild(makeSectionLabel('SIMULATION'));
+    el.appendChild(makeSliderRow({ label: 'districts', value: districtCount, min: 1, max: 8, step: 1 }, v => { districtCount = Math.round(v); reset(); }, () => {}));
+    el.appendChild(makeSliderRow({ label: 'seed', value: seed, min: 0, max: 99, step: 1 }, v => { seed = Math.round(v); reset(); }, () => {}));
+    el.appendChild(makeSliderRow({ label: 'tick ms', value: tickMs, min: 100, max: 5000, step: 100 }, v => { tickMs = Math.round(v); restartTicker(); }, () => {}));
+    el.appendChild(makeSliderRow({ label: 'growthRate', value: cfg.growthRate, min: 0.001, max: 0.2, step: 0.001 }, v => { cfg.growthRate = v; }, () => {}));
+    el.appendChild(makeSliderRow({ label: 'expandAt', value: cfg.expansionThreshold, min: 0.1, max: 5, step: 0.1 }, v => { cfg.expansionThreshold = v; }, () => {}));
+    el.appendChild(makeSliderRow({ label: 'maxSlices', value: cfg.maxSlicesPerDistrict, min: 1, max: 71, step: 2 }, v => { cfg.maxSlicesPerDistrict = Math.round(v); }, () => {}));
+    el.appendChild(makeSliderRow({ label: 'devCap', value: cfg.densificationCap, min: 0.1, max: 1, step: 0.05 }, v => { cfg.densificationCap = v; }, () => {}));
+    el.appendChild(makeResetButton(reset));
+    restartTicker();
+  }
+
+  function teardown(): void {
+    if (tickerId !== null) { clearInterval(tickerId); tickerId = null; }
+  }
+
+  return { id: 'growth', label: 'Growth sim', build: () => toDistricts(state, cfg), renderControls, teardown };
+}
+
 export class LayoutPanel {
   onLayoutChange?: (districts: District[]) => void;
   private readonly el: HTMLDivElement;
   private readonly controlsEl: HTMLDivElement;
   private readonly tabBtns = new Map<string, HTMLButtonElement>();
   private readonly layouts: LayoutDef[];
+  private activeLayout: LayoutDef | null = null;
   private districts: District[] = [];
 
   constructor() {
@@ -164,6 +217,7 @@ export class LayoutPanel {
         renderControls: (el, emit) => { renderSingleControls(el, singleState, emit); },
       },
       { id: 'ascending', label: 'Ascending 1-10', build: generateAscendingDistricts, renderControls: () => {} },
+      makeGrowthLayout(),
     ];
     this.el = this.buildShell();
     this.el.appendChild(this.makeTabRow());
@@ -218,13 +272,19 @@ export class LayoutPanel {
     return row;
   }
 
-  private activateLayout(id: string): void {
-    const layout = this.layouts.find(l => l.id === id);
-    if (!layout) return;
-    this.districts = layout.build();
+  private highlightTab(id: string): void {
     for (const [lid, btn] of this.tabBtns) {
       btn.style.background = lid === id ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)';
     }
+  }
+
+  private activateLayout(id: string): void {
+    this.activeLayout?.teardown?.();
+    const layout = this.layouts.find(l => l.id === id);
+    if (!layout) return;
+    this.activeLayout = layout;
+    this.districts = layout.build();
+    this.highlightTab(id);
     while (this.controlsEl.firstChild) this.controlsEl.removeChild(this.controlsEl.firstChild);
     const emit = () => { this.districts = layout.build(); this.onLayoutChange?.(this.districts); };
     layout.renderControls(this.controlsEl, emit);

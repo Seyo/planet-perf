@@ -122,7 +122,7 @@ class Car {
 
   private recomputeVelocity() {
     const dxDeg = normalize180(this.destDeg - this.deg);
-    if (Math.abs(dxDeg) < 0.01) { this.pickNewDest(); return; }
+    if (Math.abs(dxDeg) < 0.01) { this.vDeg = 0; return; }
     this.vDeg = Math.sign(dxDeg) * this.speed / BASE_PPD;
     if (this.vDeg !== 0) this.dirSign = Math.sign(this.vDeg);
   }
