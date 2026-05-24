@@ -19,8 +19,10 @@ type Toggle = {
 
 const FPS_UPDATE_INTERVAL   = 20;
 // State fields (xDeg, vDeg, …) throttled separately — xDeg changes every frame
-// during autopan, making it the #1 hotspot in profiles despite the setText guard.
-const STATE_UPDATE_INTERVAL = 6; // ≈10 Hz at 60 fps — debug lag is acceptable
+// during autopan, making set-textContent a profiler hotspot despite the setText
+// guard.  30 frames ≈ 2 Hz at 60 fps; still readable, halves the DOM writes vs
+// the previous interval of 6.
+const STATE_UPDATE_INTERVAL = 30;
 
 function hexToCss(hex: number, alpha: number): string {
   const r = (hex >> 16) & 0xff;
