@@ -832,28 +832,37 @@ export class ShuttleLayer {
 
   private layoutShuttles(view: CameraView): void {
     for (const s of this.shuttles) {
-      s.gfx.x = normalize180(s.deg - view.cameraDeg) * view.ppd;
-      s.gfx.y = s.y;
-      s.gfx.visible = Math.abs(s.gfx.x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
-      if (s.gfx.visible) s.drawTrail(view);
+      const x = normalize180(s.deg - view.cameraDeg) * view.ppd;
+      s.gfx.visible = Math.abs(x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
+      if (s.gfx.visible) {
+        s.gfx.x = x;
+        s.gfx.y = s.y;
+        s.drawTrail(view);
+      }
     }
   }
 
   private layoutExplosions(view: CameraView): void {
     for (const e of this.explosions) {
-      e.gfx.x = normalize180(e.deg - view.cameraDeg) * view.ppd;
-      e.gfx.y = e.y;
-      e.gfx.visible = Math.abs(e.gfx.x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
-      if (e.gfx.visible) e.draw();
+      const x = normalize180(e.deg - view.cameraDeg) * view.ppd;
+      e.gfx.visible = Math.abs(x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
+      if (e.gfx.visible) {
+        e.gfx.x = x;
+        e.gfx.y = e.y;
+        e.draw();
+      }
     }
   }
 
   private layoutDebris(view: CameraView): void {
     for (const d of this.allDebris) {
-      d.gfx.x = normalize180(d.deg - view.cameraDeg) * view.ppd;
-      d.gfx.y = d.y;
-      d.gfx.visible = Math.abs(d.gfx.x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
-      if (d.gfx.visible) d.drawTrail(view);
+      const x = normalize180(d.deg - view.cameraDeg) * view.ppd;
+      d.gfx.visible = Math.abs(x * view.zoom) < view.halfW + LAYOUT_CULL_PAD;
+      if (d.gfx.visible) {
+        d.gfx.x = x;
+        d.gfx.y = d.y;
+        d.drawTrail(view);
+      }
     }
   }
 

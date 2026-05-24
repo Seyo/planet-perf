@@ -256,12 +256,17 @@ export class ActorLayer {
     const CULL_PAD = 150;
 
     for (const car of this.cars) {
-      const relDeg  = normalize180(car.deg - cameraDeg);
-      car.gfx.x     = relDeg * this.ppd;
-      car.gfx.y     = car.y;
-      const screenX = car.gfx.x * zoom;
-      car.onScreen      = Math.abs(screenX) < halfW;
-      car.gfx.visible   = Math.abs(screenX) < halfW + CULL_PAD;
+      const x       = normalize180(car.deg - cameraDeg) * this.ppd;
+      const screenX = x * zoom;
+      car.onScreen    = Math.abs(screenX) < halfW;
+      car.gfx.visible = Math.abs(screenX) < halfW + CULL_PAD;
+      // Only write the transform when the sprite will be rendered — writing
+      // container.x for invisible actors still marks the render group dirty
+      // and costs an updateLocalTransform call on the next Pixi render pass.
+      if (car.gfx.visible) {
+        car.gfx.x = x;
+        car.gfx.y = car.y;
+      }
     }
   }
 }
