@@ -259,21 +259,30 @@ export class ActorLayer {
 
   layout(cameraDeg: number, zoom: number, viewWidthPx: number, cameraY: number) {
     this.container.y = -cameraY * this.yMotionScale;
-    const halfW    = viewWidthPx / 2;
-    const CULL_PAD = 150;
+    const halfW         = viewWidthPx / 2;
+    const CULL_PAD      = 150;
+    // Pre-compute the cull threshold in degree-space so off-screen cars can
+    // be rejected before any pixel-space multiply.  absDeg is the inlined
+    // equivalent of Math.abs(normalize180(car.deg - cameraDeg)) — same
+    // arithmetic, no function-call overhead, and the branch exits before
+    // the ×ppd / ×zoom chain for the ~80 % of cars that are off-screen.
+    const cullThreshDeg = (halfW + CULL_PAD) / (this.ppd * zoom);
 
     for (const car of this.cars) {
-      const x       = normalize180(car.deg - cameraDeg) * this.ppd;
-      const screenX = x * zoom;
-      car.onScreen    = Math.abs(screenX) < halfW;
-      car.gfx.visible = Math.abs(screenX) < halfW + CULL_PAD;
-      // Only write the transform when the sprite will be rendered — writing
-      // container.x for invisible actors still marks the render group dirty
-      // and costs an updateLocalTransform call on the next Pixi render pass.
-      if (car.gfx.visible) {
-        car.gfx.x = x;
-        car.gfx.y = car.y;
+      const diff   = ((car.deg - cameraDeg) % 360 + 360) % 360; // [0, 360)
+      const absDeg = diff > 180 ? 360 - diff : diff;             // [0, 180]
+      if (absDeg > cullThreshDeg) {
+        car.onScreen    = false;
+        car.gfx.visible = false;
+        continue;
       }
+      // Car is inside the cull zone — compute pixel position and write transform.
+      // absDeg ≤ cullThreshDeg  ↔  |screenX| ≤ halfW + CULL_PAD, so visible = true.
+      const x     = (diff > 180 ? diff - 360 : diff) * this.ppd;
+      car.onScreen    = Math.abs(x * zoom) < halfW;
+      car.gfx.visible = true;
+      car.gfx.x       = x;
+      car.gfx.y       = car.y;
     }
   }
 }
