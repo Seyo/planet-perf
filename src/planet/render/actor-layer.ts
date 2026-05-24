@@ -247,7 +247,14 @@ export class ActorLayer {
   }
 
   update(dt: number) {
-    for (const car of this.cars) car.update(dt);
+    for (const car of this.cars) {
+      // gfx.visible was set by the previous frame's layout() and includes the
+      // 150 px cull-pad buffer zone.  Cars outside that zone are never rendered
+      // and their sub-pixel positional drift is invisible, so we skip the
+      // simulation step entirely.  The gate lifts automatically the frame they
+      // scroll into the buffer zone and layout() sets visible=true.
+      if (car.gfx.visible) car.update(dt);
+    }
   }
 
   layout(cameraDeg: number, zoom: number, viewWidthPx: number, cameraY: number) {
