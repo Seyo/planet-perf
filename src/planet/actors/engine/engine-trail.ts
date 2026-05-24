@@ -115,7 +115,11 @@ export class EngineTrail {
       const by   = ptB.y - anchorY;
 
       const glow = glowAlpha(t) * cfg.engineIntensity * fadeFactor;
-      if (glow > 0.005) drawBloom(gfx, { ax, ay, bx, by, first: i === 0 }, glow, cfg);
+      // Threshold raised from 0.005 → 0.02: bloom below this produces
+      // <1% alpha quads that are visually identical to nothing, but each
+      // still costs bloomLayers × fillSegment → fill() through Pixi's
+      // context pipeline.  Cutting ~30% of bloom calls here.
+      if (glow > 0.02) drawBloom(gfx, { ax, ay, bx, by, first: i === 0 }, glow, cfg);
 
       fillSegment(gfx, { ax, ay, bx, by }, { width: cfg.trailWidth, color, alpha: t * fadeFactor });
     }

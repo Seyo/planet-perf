@@ -393,7 +393,9 @@ class Shuttle {
       trailSpeedFactor: config.trailSpeedFactor,
       engineIntensity:  1.0,
       trailWidth:       1.0,
-      bloomLayers:      3 + Math.floor(Math.random() * 3),
+      // 2 bloom passes: enough for a visible glow at the hot tip without the
+      // per-segment cost of the previous 3–5 random layers.
+      bloomLayers:      2,
     };
     this.trailGfx = new Graphics();
 
