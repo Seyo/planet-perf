@@ -370,15 +370,35 @@ planet.addActorLayer(testBlock);
 
 // Frontmost shuttle layer — its ppd/yMotionScale are the correct parallax basis.
 const frontShuttle = (): ShuttleLayer | undefined => shuttleLayers[shuttleLayers.length - 1];
-explosionTester.onSpawn = (deg, y, cfg) => { frontShuttle()?.spawnExplosionAt({ deg, y }, cfg); };
-shuttleTester.onSpawn   = (deg, cfg) => { frontShuttle()?.spawnShuttleAt(deg, cfg); };
-shuttleTester.onClear   = ()         => { for (const sl of shuttleLayers) sl.clearShuttles(); };
+explosionTester.onSpawn  = (deg, y, cfg)        => { frontShuttle()?.spawnExplosionAt({ deg, y }, cfg); };
+shuttleTester.onSpawn    = (deg, cfg, opts)     => { frontShuttle()?.spawnShuttleAt(deg, cfg, opts); };
+shuttleTester.onClear    = ()                   => { for (const sl of shuttleLayers) sl.clearShuttles(); };
+shuttleTester.onSetTarget = (id, target)        => { frontShuttle()?.setTesterTarget(id, target); };
 
 const updateCursor = () => {
   app.canvas.style.cursor =
     explosionTester.isVisible || shuttleTester.isVisible ? 'crosshair' : '';
 };
 
+// Convert a canvas pointer event into (deg, y) world coords using the
+// frontmost shuttle layer's parallax. Returns null when no shuttle layer
+// exists (early boot path).
+function pointerToWorld(e: { clientX: number; clientY: number }): { deg: number; y: number } | null {
+  const shuttle = frontShuttle();
+  if (!shuttle) return null;
+  const rect = app.canvas.getBoundingClientRect();
+  const dpr  = window.devicePixelRatio;
+  const cx   = (e.clientX - rect.left) * dpr;
+  const cy   = (e.clientY - rect.top)  * dpr;
+  const zoom = planet.zoomLevel;
+  const deg  = planet.xDeg + (cx - app.renderer.width / 2) / (shuttle.layerPpd * zoom);
+  const y    = cy / zoom + planet.cameraY * shuttle.layerYMotionScale;
+  return { deg, y };
+}
+
+// Plain click is reserved for camera interaction. Tester spawn requires
+// Ctrl+click so the user can still pan / interact with the planet while
+// either tester is open.
 app.canvas.addEventListener('click', (e) => {
   const rect = app.canvas.getBoundingClientRect();
   const dpr  = window.devicePixelRatio;
@@ -390,13 +410,21 @@ app.canvas.addEventListener('click', (e) => {
     boundsOverlay.handleClick(cx, cy, planet.xDeg, zoom, app.renderer.width, planet.cameraY, boundsLayerInfos, registry);
   }
 
+  if (!e.ctrlKey) return;
   if (!explosionTester.isVisible && !shuttleTester.isVisible) return;
-  const shuttle = frontShuttle();
-  if (!shuttle) return;
-  const deg = planet.xDeg + (cx - app.renderer.width / 2) / (shuttle.layerPpd * zoom);
-  const y   = cy / zoom + planet.cameraY * shuttle.layerYMotionScale;
-  if (explosionTester.isVisible) explosionTester.spawnAt(deg, y);
-  if (shuttleTester.isVisible)   shuttleTester.spawnAt(deg, y);
+  const w = pointerToWorld(e);
+  if (!w) return;
+  if (explosionTester.isVisible) explosionTester.spawnAt(w.deg, w.y);
+  if (shuttleTester.isVisible)   shuttleTester.spawnAt(w.deg, w.y);
+});
+
+// Pointermove → tester so it can track the cursor target while
+// Follow cursor is on. Listener stays installed; the tester's own
+// `followCursorOn` gate cheaply ignores moves when off.
+app.canvas.addEventListener('pointermove', (e) => {
+  if (!shuttleTester.isVisible) return;
+  const w = pointerToWorld(e);
+  if (w) shuttleTester.onPointerMove(w.deg, w.y);
 });
 
 layoutPanel.onLayoutChange = applyDistricts;

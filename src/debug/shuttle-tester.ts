@@ -1,4 +1,4 @@
-import type { FlightConfig } from '../planet/shuttle-sim';
+import type { FlightConfig, ShuttleTarget } from '../planet/shuttle-sim';
 import { DEFAULT_FLIGHT_CONFIG } from '../planet/shuttle-sim';
 
 type SliderSpec = {
@@ -9,10 +9,13 @@ type SliderSpec = {
   step:  number;
 };
 
+// Sliders the tester actually exposes. Dropped from the previous panel:
+//   waitTicksMin/Max — constructor forces both to 0, sliders were dead UI.
+//   maxTrailPoints/trailSpeedFactor — appearance-only; not flight knobs.
+// levelThreshold and landThreshold folded into the PHYSICS section.
 const SECTIONS: [string, SliderSpec[]][] = [
   ['FLIGHT', [
-    { key: 'maxHorizSpeed',    label: 'max speed',       min: 0.02, max: 1.5,  step: 0.01  },
-    { key: 'trailSpeedFactor', label: 'trail length',    min: 5,    max: 80,   step: 1     },
+    { key: 'maxHorizSpeed',    label: 'max speed', min: 0.02, max: 1.5,  step: 0.01  },
   ]],
   ['ALTITUDE', [
     { key: 'cruiseYMin', label: 'cruise y min', min: -800, max: -20, step: 10 },
@@ -23,10 +26,12 @@ const SECTIONS: [string, SliderSpec[]][] = [
     { key: 'cruiseDegMax', label: 'travel deg max', min: 10, max: 400, step: 5 },
   ]],
   ['PHYSICS', [
-    { key: 'maxClimbRate',   label: 'climb rate',   min: 0.1,    max: 5.0,  step: 0.05   },
-    { key: 'maxDescentRate', label: 'descent rate', min: 0.1,    max: 5.0,  step: 0.05   },
-    { key: 'maxVertAccel',   label: 'vert accel',   min: 0.001,  max: 0.2,  step: 0.001  },
-    { key: 'maxTurnAccel',   label: 'turn accel',   min: 0.0001, max: 0.02, step: 0.0001 },
+    { key: 'maxClimbRate',   label: 'climb rate',      min: 0.1,    max: 5.0,  step: 0.05   },
+    { key: 'maxDescentRate', label: 'descent rate',    min: 0.1,    max: 5.0,  step: 0.05   },
+    { key: 'maxVertAccel',   label: 'vert accel',      min: 0.001,  max: 0.2,  step: 0.001  },
+    { key: 'maxTurnAccel',   label: 'turn accel',      min: 0.0001, max: 0.02, step: 0.0001 },
+    { key: 'levelThreshold', label: 'level threshold', min: 1,      max: 80,   step: 1      },
+    { key: 'landThreshold',  label: 'land threshold',  min: 1,      max: 30,   step: 1      },
   ]],
   ['APPEARANCE', [
     { key: 'bodyHalfLenMin',  label: 'body len min',     min: 1, max: 12, step: 0.5 },
@@ -34,15 +39,8 @@ const SECTIONS: [string, SliderSpec[]][] = [
     { key: 'engineIntensity', label: 'engine intensity', min: 0, max: 4,  step: 0.1 },
   ]],
   ['BEHAVIOUR', [
-    { key: 'explodeChance',      label: 'explode chance', min: 0,    max: 1,    step: 0.05 },
-    { key: 'explodeAfterFrames', label: 'explode after',  min: 0,    max: 1200, step: 10   },
-    { key: 'waitTicksMin',       label: 'wait min',       min: 0,    max: 600,  step: 10   },
-    { key: 'waitTicksMax',       label: 'wait max',       min: 0,    max: 1200, step: 10   },
-  ]],
-  ['THRESHOLDS', [
-    { key: 'maxTrailPoints',  label: 'trail points',    min: 20, max: 300, step: 10 },
-    { key: 'levelThreshold',  label: 'level threshold', min: 1,  max: 80,  step: 1  },
-    { key: 'landThreshold',   label: 'land threshold',  min: 1,  max: 30,  step: 1  },
+    { key: 'explodeChance',      label: 'explode chance', min: 0, max: 1,    step: 0.05 },
+    { key: 'explodeAfterFrames', label: 'explode after',  min: 0, max: 1200, step: 10   },
   ]],
 ];
 
@@ -55,13 +53,18 @@ function decimalsForStep(step: number): number {
 }
 
 export class ShuttleTesterPanel {
-  private readonly el:        HTMLDivElement;
-  private readonly config:    FlightConfig;
-  private readonly valueEls  = new Map<keyof FlightConfig, HTMLSpanElement>();
-  private readonly sliderEls = new Map<keyof FlightConfig, HTMLInputElement>();
+  private readonly el:         HTMLDivElement;
+  private readonly config:     FlightConfig;
+  private readonly valueEls   = new Map<keyof FlightConfig, HTMLSpanElement>();
+  private readonly sliderEls  = new Map<keyof FlightConfig, HTMLInputElement>();
+  private followCursorOn      = false;
+  private lastCursorDeg: number | null = null;
+  private lastCursorY:   number | null = null;
+  private smoothedVDeg        = 0;
 
-  onSpawn?: (deg: number, cfg: Readonly<FlightConfig>) => void;
-  onClear?: () => void;
+  onSpawn?:     (deg: number, cfg: Readonly<FlightConfig>, opts: { targetId?: string }) => void;
+  onClear?:     () => void;
+  onSetTarget?: (id: string, target: ShuttleTarget | null) => void;
 
   constructor() {
     this.config = { ...DEFAULT_FLIGHT_CONFIG, waitTicksMin: 0, waitTicksMax: 0 };
@@ -76,8 +79,39 @@ export class ShuttleTesterPanel {
     this.el.style.display = this.isVisible ? 'none' : 'block';
   }
 
+  // Called by main on Ctrl+click. When follow-cursor is on, spawned
+  // shuttles chase the 'cursor' target; otherwise they fly today's
+  // open-loop FlightPlan to whatever district pick comes back.
   spawnAt(deg: number, _y: number): void {
-    this.onSpawn?.(deg, { ...this.config });
+    const opts = this.followCursorOn ? { targetId: 'cursor' } : {};
+    this.onSpawn?.(deg, { ...this.config }, opts);
+  }
+
+  // Called by main on every pointermove while the tester is visible. We
+  // smooth the per-frame deg delta with a one-pole filter so the lead
+  // prediction doesn't jitter on fast mouse jerks.
+  onPointerMove(deg: number, y: number): void {
+    if (!this.followCursorOn) return;
+    const prevDeg = this.lastCursorDeg;
+    if (prevDeg !== null) {
+      const rawV = deg - prevDeg;
+      this.smoothedVDeg = 0.4 * rawV + 0.6 * this.smoothedVDeg;
+    }
+    this.lastCursorDeg = deg;
+    this.lastCursorY   = y;
+    this.onSetTarget?.('cursor', { deg, y, vDeg: this.smoothedVDeg });
+  }
+
+  private toggleFollowCursor(btn: HTMLButtonElement): void {
+    this.followCursorOn = !this.followCursorOn;
+    btn.textContent = `follow cursor: ${this.followCursorOn ? 'on' : 'off'}`;
+    btn.style.color = this.followCursorOn ? '#88ff88' : 'rgba(255,255,255,0.7)';
+    if (!this.followCursorOn) {
+      this.onSetTarget?.('cursor', null);
+      this.lastCursorDeg = null;
+      this.lastCursorY   = null;
+      this.smoothedVDeg  = 0;
+    }
   }
 
   private build(): HTMLDivElement {
@@ -102,7 +136,8 @@ export class ShuttleTesterPanel {
       boxSizing:    'border-box',
     });
 
-    el.appendChild(this.makeLabel('SHUTTLE TESTER — click canvas to spawn', true));
+    el.appendChild(this.makeLabel('SHUTTLE TESTER — ctrl+click to spawn', true));
+    el.appendChild(this.makeFollowCursorButton());
     for (const [name, specs] of SECTIONS) {
       el.appendChild(this.makeLabel(name));
       for (const spec of specs) el.appendChild(this.makeSliderRow(spec));
@@ -171,8 +206,8 @@ export class ShuttleTesterPanel {
   private makeActionButton(
     text: string, marginTop: string,
     accent: { color: string; background: string; border: string },
-    onClick: () => void,
-  ): HTMLElement {
+    onClick: (btn: HTMLButtonElement) => void,
+  ): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.textContent = text;
     Object.assign(btn.style, {
@@ -180,8 +215,16 @@ export class ShuttleTesterPanel {
       padding: '2px 8px', borderRadius: '3px', transition: 'none',
       display: 'block', marginTop, ...accent,
     });
-    btn.addEventListener('click', onClick);
+    btn.addEventListener('click', () => { onClick(btn); });
     return btn;
+  }
+
+  private makeFollowCursorButton(): HTMLElement {
+    return this.makeActionButton(
+      'follow cursor: off', '0',
+      { color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)' },
+      (btn) => { this.toggleFollowCursor(btn); },
+    );
   }
 
   private makeResetButton(): HTMLElement {
