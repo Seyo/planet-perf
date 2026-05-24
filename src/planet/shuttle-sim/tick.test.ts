@@ -125,6 +125,33 @@ describe('tickShuttle', () => {
   });
 });
 
+describe('dyingDelay (staggered annihilate)', () => {
+  it('decrements dyingDelay each tick without triggering until it hits zero', () => {
+    const state = freshState({
+      phase: 'cruising', y: -250, vDeg: 0.1, dirSign: 1,
+      cruiseY: -250, cruiseSpeed: 0.1, cruiseDegLimit: 100,
+      dyingDelay: 30,
+    });
+    const trail = freshTrail();
+    for (let i = 0; i < 29; i++) {
+      const events = tick(state, trail, testConfig());
+      expect(events.some(e => e.type === 'explode')).toBe(false);
+    }
+    expect(state.dyingDelay).toBe(1);
+    const finalEvents = tick(state, trail, testConfig());
+    expect(finalEvents.some(e => e.type === 'explode')).toBe(true);
+    expect(state.phase).toBe('dying');
+  });
+
+  it('ignores dyingDelay on a grounded shuttle (brain skips grounded)', () => {
+    const state = freshState({ phase: 'grounded', dyingDelay: 5, waitTicks: 100 });
+    const trail = freshTrail();
+    const events = tick(state, trail, testConfig());
+    expect(events).toEqual([]);
+    expect(state.dyingDelay).toBe(5); // unchanged — wrapper handles grounded
+  });
+});
+
 describe('explodeShuttle', () => {
   it('detonates a flying shuttle and emits one explode event', () => {
     const state = freshState({

@@ -638,12 +638,15 @@ export class ShuttleLayer {
     else this.pickRandomFlying()?.triggerExplosion();
   }
 
+  // Frames between staggered detonations. 15 frames ≈ 250 ms at 60 fps,
+  // matching the previous setTimeout cadence but on the sim clock so the
+  // sequence is deterministic and replay-safe.
   annihilate(): void {
-    let delay = 0;
+    let frames = 0;
     for (const s of this.shuttles) {
       if (!s.isFlying) continue;
-      delay += 250;
-      setTimeout(() => { if (s.isFlying) s.triggerExplosion(); }, delay);
+      frames += 15;
+      s.state.dyingDelay = frames;
     }
   }
 

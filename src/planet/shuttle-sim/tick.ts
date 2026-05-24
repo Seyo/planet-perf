@@ -38,24 +38,33 @@ export function tickShuttle(input: TickInputs): ShuttleEvent[] {
   const events: ShuttleEvent[] = [];
 
   if (state.phase === 'grounded') return events;
-
-  if (state.phase === 'dying') {
-    state.dyingTrailLen -= dt;
-    if (state.dyingTrailLen <= 0) events.push({ type: 'respawn-ready' });
-    return events;
-  }
+  if (state.phase === 'dying')    { tickDying(state, dt, events); return events; }
 
   // Flying phases (ascending, cruising, descending)
   state.flyingFrames += dt;
   const ctx: Ctx = { state, trail, config, basePPD, events };
-  if (checkExplodeAfterFrames(state, config)) {
-    triggerExplosion(ctx);
-    return events;
-  }
+  if (checkDyingDelay(ctx, dt))                return events;
+  if (checkExplodeAfterFrames(state, config))  { triggerExplosion(ctx); return events; }
   applyPhysics(state, config, dt);
-  if (advancePhase(ctx, dt)) return events;
+  if (advancePhase(ctx, dt))                   return events;
   recordTrailPoint(trail, state.deg, state.y);
   return events;
+}
+
+function tickDying(state: ShuttleSimState, dt: number, events: ShuttleEvent[]): void {
+  state.dyingTrailLen -= dt;
+  if (state.dyingTrailLen <= 0) events.push({ type: 'respawn-ready' });
+}
+
+// Scheduled detonation (e.g. annihilate). Tick down independently of
+// physics; when it elapses, detonate exactly the way a willExplode
+// shuttle would. Returns true when the shuttle just exploded.
+function checkDyingDelay(ctx: Ctx, dt: number): boolean {
+  if (ctx.state.dyingDelay <= 0) return false;
+  ctx.state.dyingDelay -= dt;
+  if (ctx.state.dyingDelay > 0)  return false;
+  triggerExplosion(ctx);
+  return true;
 }
 
 // Public escape hatch for outside callers (debug annihilate, scripted spawns)

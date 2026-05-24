@@ -28,6 +28,10 @@ export type ShuttleSimState = {
   // Dying countdown (visible trail fade after explosion)
   dyingTrailLen: number;
   dyingTrailMax: number;
+  // Pre-detonation countdown. While > 0 (and the shuttle is flying), each
+  // tick decrements this; on reaching 0 the brain triggers an explosion.
+  // Used for staggered annihilate without setTimeout.
+  dyingDelay: number;
   // Per-shuttle invariants set at construction
   readonly maxSpeed: number;
   readonly halfLen:  number;
@@ -52,6 +56,7 @@ export function createShuttleSimState(opts: { deg: number; maxSpeed: number; hal
     overshootCount: 0,
     dyingTrailLen:  0,
     dyingTrailMax:  0,
+    dyingDelay:     0,
     maxSpeed:       opts.maxSpeed,
     halfLen:        opts.halfLen,
   };
