@@ -1,19 +1,18 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { normalize180, clamp, lerpColor } from "../../../math";
-import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, estimateDescentDeg, type FlightConfig, type ExplosionConfig } from './physics';
+import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, type FlightConfig, type ExplosionConfig } from './physics';
 import { distanceFlightPlan, type FlightPlanFn } from './flight-plan';
 import { EngineTrail, type EngineConfig } from '../../../actors/engine';
-import { createTrailBuffer, type Phase, type ExplosionOrigin, type TrailBuffer } from '../../../shuttle-sim';
+import {
+  createShuttleSimState, createTrailBuffer, explodeShuttle, tickShuttle,
+  SURFACE_Y,
+  type ExplosionOrigin, type ShuttleEvent, type ShuttleSimState, type TrailBuffer,
+} from '../../../shuttle-sim';
 
 const BASE_PPD = 24;
-const SURFACE_Y = -2;
 const FIZZLE_FADE_FRAMES = 20;
 const LAYOUT_CULL_PAD = 400;
-const DESCENT_PD_GAIN           = 0.008;
-const SAFE_LANDING_ACCEL_FRAMES = 10;
 const MIN_CRUISE_DEG            = 15; // minimum trip distance
-const MAX_OVERSHOOTS            =  1;
-const LANDING_MISS_DEG          = 10;
 
 type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
 type CruisePicker = (deg: number) => { toDeg: number } | null;
@@ -331,55 +330,39 @@ class Debris {
 // ─── Shuttle ──────────────────────────────────────────────────────────────────
 
 class Shuttle {
-  deg: number;
-  y      = SURFACE_Y;
-  vDeg   = 0;
-  vY     = 0;
   readonly gfx: Container;
+  readonly state: ShuttleSimState;
+  readonly trail: TrailBuffer;
   private readonly trailGfx: Graphics;
   private readonly bodyGfx: Container;
   private readonly callout: Container;
   private readonly debugGfx: Graphics;
   private readonly updateCalloutLabel: (s: string) => void;
-  private readonly maxSpeed: number;
   private readonly config: FlightConfig;
   private readonly engineTrail: EngineTrail;
-  readonly trail: TrailBuffer;
-  private readonly engineCfg:   EngineConfig;
+  private readonly engineCfg: EngineConfig;
   private warmColor: number;
   private coolColor: number;
-  private phase: Phase = 'grounded';
-  private waitTicks      = 0;
-  private dirSign        = 1;
-  private cruiseY        = -250;
-  private cruiseSpeed    = 0;
-  private cruiseDegLimit = 80;
-  private traveledDeg    = 0;
-  private landingDeg: number | null = null;
-  private willExplode      = false;
-  private dyingTrailLen    = 0;
-  private dyingTrailMax    = 0;
-  private flyingFrames     = 0;
-  private overshootCount   = 0;
   public pendingExplosion: ExplosionOrigin | null = null;
-  private readonly halfLen: number;
   private readonly pickTarget: CruisePicker | undefined;
   private readonly respawnDeg: (() => number) | undefined;
   private readonly planFn: FlightPlanFn;
 
-  get isFlying(): boolean {
-    return this.phase !== 'grounded' && this.phase !== 'dying';
-  }
+  // Layer code still reads these directly off the shuttle; getters keep the
+  // public surface stable while state moves to ShuttleSimState.
+  get deg():       number  { return this.state.deg; }
+  get y():         number  { return this.state.y; }
+  get isFlying():  boolean { return this.state.phase !== 'grounded' && this.state.phase !== 'dying'; }
 
   constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, init?: { startDeg?: number; pickTarget?: CruisePicker; respawnDeg?: () => number; planFn?: FlightPlanFn }) {
     this.config      = config;
     this.pickTarget  = init?.pickTarget;
     this.respawnDeg  = init?.respawnDeg;
     this.planFn      = init?.planFn ?? distanceFlightPlan;
-    this.deg         = init?.startDeg ?? Math.random() * 360;
-    this.halfLen   = config.bodyHalfLenMin
-      + Math.random() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
-    this.maxSpeed  = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
+    const startDeg   = init?.startDeg ?? Math.random() * 360;
+    const halfLen    = config.bodyHalfLenMin + Math.random() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
+    const maxSpeed   = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
+    this.state       = createShuttleSimState({ deg: startDeg, halfLen, maxSpeed });
     this.warmColor   = colors.warm;
     this.coolColor   = colors.cool;
     this.trail       = createTrailBuffer(config.maxTrailPoints);
@@ -397,8 +380,8 @@ class Shuttle {
     };
     this.trailGfx = new Graphics();
 
-    const body = new Graphics().rect(-this.halfLen, -0.5, this.halfLen * 2, 1).fill(0x222233);
-    const nose = new Graphics().circle(this.halfLen, 0, 0.5).fill(colors.cool);
+    const body = new Graphics().rect(-halfLen, -0.5, halfLen * 2, 1).fill(0x222233);
+    const nose = new Graphics().circle(halfLen, 0, 0.5).fill(colors.cool);
     this.bodyGfx = new Container();
     this.bodyGfx.addChild(body, nose);
 
@@ -414,20 +397,21 @@ class Shuttle {
     this.startWait();
   }
 
-  setColors(colors: ShuttleColors) {
+  setColors(colors: ShuttleColors): void {
     this.warmColor             = colors.warm;
     this.coolColor             = colors.cool;
     this.engineCfg.warmColor   = colors.warm;
     this.engineCfg.coolColor   = colors.cool;
   }
 
-  private startWait() {
-    this.phase            = 'grounded';
-    this.vDeg             = 0;
-    this.vY               = 0;
-    this.y                = SURFACE_Y;
-    this.flyingFrames     = 0;
-    this.waitTicks       = this.config.waitTicksMin
+  private startWait(): void {
+    const s = this.state;
+    s.phase        = 'grounded';
+    s.vDeg         = 0;
+    s.vY           = 0;
+    s.y            = SURFACE_Y;
+    s.flyingFrames = 0;
+    s.waitTicks    = this.config.waitTicksMin
       + Math.floor(Math.random() * (this.config.waitTicksMax - this.config.waitTicksMin));
     this.engineTrail.reset();
     this.bodyGfx.visible  = true;
@@ -435,195 +419,68 @@ class Shuttle {
   }
 
   private launch(): void {
-    const toDeg = this.pickTarget?.(this.deg)?.toDeg ?? null;
-    const plan  = this.planFn(this.deg, toDeg, this.config);
-    this.cruiseY        = plan.cruiseY;
-    this.cruiseSpeed    = this.maxSpeed * (plan.cruiseSpeed / this.config.maxHorizSpeed);
-    this.dirSign        = plan.dirSign;
-    this.landingDeg     = plan.landingDeg;
-    this.cruiseDegLimit = plan.cruiseDegLimit;
-    this.traveledDeg    = 0;
-    this.overshootCount = 0;
-    this.willExplode    = plan.willExplode;
-    this.phase          = 'ascending';
+    const s = this.state;
+    const toDeg = this.pickTarget?.(s.deg)?.toDeg ?? null;
+    const plan  = this.planFn(s.deg, toDeg, this.config);
+    s.cruiseY        = plan.cruiseY;
+    s.cruiseSpeed    = s.maxSpeed * (plan.cruiseSpeed / this.config.maxHorizSpeed);
+    s.dirSign        = plan.dirSign;
+    s.landingDeg     = plan.landingDeg;
+    s.cruiseDegLimit = plan.cruiseDegLimit;
+    s.traveledDeg    = 0;
+    s.overshootCount = 0;
+    s.willExplode    = plan.willExplode;
+    s.phase          = 'ascending';
   }
 
-  triggerExplosion() {
-    if (this.phase === 'grounded' || this.phase === 'dying') return;
-
-    // Move anchor to engine (rear of shuttle body) so trail tip, explosion, and
-    // debris all originate from the same point with no gap.
-    const rot        = Math.atan2(this.vY, this.vDeg * BASE_PPD);
-    this.deg         = ((this.deg + (-this.halfLen * Math.cos(rot)) / BASE_PPD) % 360 + 360) % 360;
-    this.y          +=  -this.halfLen * Math.sin(rot);
-
-    // Record one final trail point at the engine position so the trail tip is flush
-    this.engineTrail.record(this.deg, this.y);
-
-    this.pendingExplosion = { deg: this.deg, y: this.y, vDeg: this.vDeg, vY: this.vY };
-
-    const speedPx      = Math.sqrt((this.vDeg * BASE_PPD) ** 2 + this.vY ** 2);
-    this.dyingTrailLen = Math.min(
-      this.engineTrail.pointCount,
-      Math.floor(speedPx * this.config.trailSpeedFactor),
-    );
-    this.dyingTrailMax   = this.dyingTrailLen;
-    this.phase           = 'dying';
-    this.vDeg            = 0;
-    this.vY              = 0;
-    this.bodyGfx.visible = false;
-  }
-
-  private updateGrounded(tick: Tick): void {
-    this.waitTicks -= tick.dt;
-    if (this.waitTicks <= 0) this.launch();
-  }
-
-  private updateDying(tick: Tick): void {
-    this.dyingTrailLen -= tick.dt;
-    if (this.dyingTrailLen <= 0) {
-      this.deg = this.respawnDeg ? this.respawnDeg() : Math.random() * 360; // teleport off-screen before waiting
-      this.startWait();
-    }
-  }
-
-  private startArcTurn(): void {
-    this.overshootCount++;
-    this.dirSign     = -this.dirSign;
-    this.traveledDeg = 0;
-    const remain = this.dirSign * normalize180((this.landingDeg ?? this.deg) - this.deg);
-    const brake  = estimateDescentDeg(this.config, this.cruiseY, this.cruiseSpeed);
-    this.cruiseDegLimit = Math.max(0, remain - brake);
-    if (this.cruiseDegLimit === 0) this.phase = 'descending';
-  }
-
-  private advanceCruise(): void {
-    const canArc = this.landingDeg !== null && this.overshootCount < MAX_OVERSHOOTS;
-    if (canArc) this.startArcTurn(); else this.phase = 'descending';
-  }
-
-  // When entering cruise, recompute cruiseDegLimit from actual position+speed,
-  // so horizontal movement during ascent doesn't cause overshoot.
-  private recalcCruiseLimit(): void {
-    if (this.landingDeg === null) return;
-    const remainDeg = this.dirSign * normalize180(this.landingDeg - this.deg);
-    if (remainDeg <= 0) { this.advanceCruise(); return; }
-    const brakeDeg = estimateDescentDeg(this.config, this.cruiseY, this.cruiseSpeed);
-    this.cruiseDegLimit = Math.max(0, remainDeg - brakeDeg);
-  }
-
-  private vertControlParams(): { targetY: number; pdGain: number } {
-    const targetY = this.phase === 'descending' ? SURFACE_Y : this.cruiseY;
-    const pdGain  = this.phase === 'descending' ? DESCENT_PD_GAIN : 0.12;
-    return { targetY, pdGain };
-  }
-
-  private horizTargetSpeed(): number {
-    if (this.phase === 'ascending') return this.maxSpeed * 0.35; // slow climb — fighting gravity
-    if (this.phase === 'cruising')  return this.cruiseSpeed;
-    // Quadratic decel: maintains speed through most of descent, brakes hard near ground.
-    const af = clamp((this.y - this.cruiseY) / (SURFACE_Y - this.cruiseY), 0, 1);
-    return this.cruiseSpeed * (1 - af * af);
-  }
-
-  private applyPhysics(tick: Tick): void {
-    const { targetY, pdGain } = this.vertControlParams();
-    const targetVY = clamp(
-      (targetY - this.y) * pdGain,
-      -this.config.maxClimbRate,
-      this.config.maxDescentRate,
-    );
-    this.vY += clamp(
-      targetVY - this.vY,
-      -this.config.maxVertAccel * tick.dt,
-      this.config.maxVertAccel * tick.dt,
-    );
-
-    const targetVDeg = this.horizTargetSpeed() * this.dirSign;
-    this.vDeg += clamp(
-      targetVDeg - this.vDeg,
-      -this.config.maxTurnAccel * tick.dt,
-      this.config.maxTurnAccel * tick.dt,
-    );
-
-    this.deg = ((this.deg + this.vDeg * tick.dt) % 360 + 360) % 360;
-    this.y  += this.vY * tick.dt;
-  }
-
-  private checkDescentOvershoot(): boolean {
-    if (this.landingDeg === null || this.overshootCount >= MAX_OVERSHOOTS) return false;
-    const passed = this.dirSign * normalize180(this.landingDeg - this.deg) < 0;
-    if (passed) this.startArcTurn();
-    return passed;
-  }
-
-  // Returns true when the shuttle has just triggered an explosion (caller must return early).
-  private checkCruisingPhase(tick: Tick): boolean {
-    this.traveledDeg += Math.abs(this.vDeg * tick.dt);
-    if (this.willExplode && this.traveledDeg >= this.cruiseDegLimit * 0.5) {
-      this.triggerExplosion();
-      return true;
-    }
-    if (this.traveledDeg >= this.cruiseDegLimit) this.phase = 'descending';
-    return false;
-  }
-
-  private checkExplodeAfterFrames(): boolean {
-    return this.config.explodeAfterFrames > 0
-      && this.flyingFrames >= this.config.explodeAfterFrames;
-  }
-
-  private tryLand(): void {
-    const tooFast = Math.abs(this.vDeg) > this.config.maxTurnAccel * SAFE_LANDING_ACCEL_FRAMES;
-    const tooFar  = this.landingDeg !== null
-      && Math.abs(normalize180(this.landingDeg - this.deg)) > LANDING_MISS_DEG;
-    if (tooFast || tooFar) this.triggerExplosion(); else this.startWait();
-  }
-
-  private checkDescending(): boolean {
-    if (this.checkDescentOvershoot()) return true;
-    if (this.y >= SURFACE_Y - this.config.landThreshold) { this.tryLand(); return true; }
-    return false;
-  }
-
-  private advancePhase(tick: Tick): boolean {
-    if (this.phase === 'ascending' && Math.abs(this.y - this.cruiseY) < this.config.levelThreshold) {
-      this.phase = 'cruising';
-      this.recalcCruiseLimit();
-    }
-    if (this.phase === 'cruising' && this.checkCruisingPhase(tick)) return true;
-    if (this.phase === 'descending') return this.checkDescending();
-    return false;
-  }
-
-  private updateFlying(tick: Tick): void {
-    this.flyingFrames += tick.dt;
-    if (this.checkExplodeAfterFrames()) { this.triggerExplosion(); return; }
-    this.applyPhysics(tick);
-    if (this.advancePhase(tick)) return;
-    this.engineTrail.record(this.deg, this.y);
-    this.bodyGfx.rotation = Math.atan2(this.vY, this.vDeg * BASE_PPD);
+  // External trigger (debug annihilate, scripted tests). Delegates to the
+  // brain's exported explode helper so the wrapper handles the resulting
+  // events uniformly with brain-emitted ones.
+  triggerExplosion(): void {
+    const events = explodeShuttle(this.state, this.trail, this.config, BASE_PPD);
+    for (const e of events) this.handleEvent(e);
   }
 
   update(tick: Tick): void {
-    if (this.phase === 'grounded') { this.updateGrounded(tick); return; }
-    if (this.phase === 'dying')    { this.updateDying(tick);    return; }
-    this.updateFlying(tick);
+    const s = this.state;
+    if (s.phase === 'grounded') {
+      s.waitTicks -= tick.dt;
+      if (s.waitTicks <= 0) this.launch();
+      return;
+    }
+    const events = tickShuttle({ state: s, trail: this.trail, config: this.config, basePPD: BASE_PPD, dt: tick.dt });
+    for (const e of events) this.handleEvent(e);
+    if (this.isFlying) this.bodyGfx.rotation = Math.atan2(s.vY, s.vDeg * BASE_PPD);
+  }
+
+  private handleEvent(e: ShuttleEvent): void {
+    if (e.type === 'explode') {
+      this.pendingExplosion = e.origin;
+      this.bodyGfx.visible = false;
+      return;
+    }
+    if (e.type === 'landed') {
+      this.startWait();
+      return;
+    }
+    // 'respawn-ready'
+    this.state.deg = this.respawnDeg ? this.respawnDeg() : Math.random() * 360;
+    this.startWait();
   }
 
   private computeDyingFade(): number {
-    return this.phase === 'dying' && this.dyingTrailMax > 0
-      ? this.dyingTrailLen / this.dyingTrailMax
-      : 1;
+    const s = this.state;
+    return s.phase === 'dying' && s.dyingTrailMax > 0 ? s.dyingTrailLen / s.dyingTrailMax : 1;
   }
 
   private drawDebugInfo(view: CameraView): void {
     this.debugGfx.clear();
-    if (this.landingDeg === null || !this.isFlying) return;
-    const remainDeg = this.dirSign * normalize180(this.landingDeg - this.deg);
+    const s = this.state;
+    if (s.landingDeg === null || !this.isFlying) return;
+    const remainDeg = s.dirSign * normalize180(s.landingDeg - s.deg);
     this.updateCalloutLabel(`${remainDeg.toFixed(1)}°`);
-    const dx = normalize180(this.landingDeg - this.deg) * view.ppd;
-    const dy = SURFACE_Y - this.y;
+    const dx = normalize180(s.landingDeg - s.deg) * view.ppd;
+    const dy = SURFACE_Y - s.y;
     this.debugGfx
       .moveTo(0, 0).lineTo(dx, dy)
       .stroke({ color: 0x44ddaa, alpha: 0.75, width: 1 });
@@ -632,17 +489,18 @@ class Shuttle {
       .stroke({ color: 0x44ddaa, alpha: 1.0, width: 1.5 });
   }
 
-  drawTrail(view: CameraView) {
+  drawTrail(view: CameraView): void {
     this.callout.visible = view.showCallout;
     this.debugGfx.visible = view.showCallout;
     if (view.showCallout) this.drawDebugInfo(view);
-    if (this.phase === 'grounded') { this.engineTrail.ensureClear(this.trailGfx); return; }
+    const s = this.state;
+    if (s.phase === 'grounded') { this.engineTrail.ensureClear(this.trailGfx); return; }
 
-    const dying     = this.phase === 'dying';
+    const dying     = s.phase === 'dying';
     const dyingFade = this.computeDyingFade();
     const speedPx   = dying
-      ? this.dyingTrailLen / this.config.trailSpeedFactor
-      : Math.sqrt((this.vDeg * view.ppd) ** 2 + this.vY ** 2);
+      ? s.dyingTrailLen / this.config.trailSpeedFactor
+      : Math.sqrt((s.vDeg * view.ppd) ** 2 + s.vY ** 2);
 
     if (!dying) {
       const maxSpeedPx = this.config.maxHorizSpeed * view.ppd;
@@ -650,7 +508,7 @@ class Shuttle {
     }
 
     this.engineTrail.draw(this.trailGfx, {
-      ppd: view.ppd, anchorDeg: this.deg, anchorY: this.y, speedPx, fadeFactor: dyingFade,
+      ppd: view.ppd, anchorDeg: s.deg, anchorY: s.y, speedPx, fadeFactor: dyingFade,
     }, this.engineCfg);
   }
 }
