@@ -3,6 +3,7 @@ import { normalize180, clamp, lerpColor } from "../../../math";
 import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, estimateDescentDeg, type FlightConfig, type ExplosionConfig } from './physics';
 import { distanceFlightPlan, type FlightPlanFn } from './flight-plan';
 import { EngineTrail, type EngineConfig } from '../../../actors/engine';
+import { createTrailBuffer, type Phase, type ExplosionOrigin, type TrailBuffer } from '../../../shuttle-sim';
 
 const BASE_PPD = 24;
 const SURFACE_Y = -2;
@@ -65,16 +66,11 @@ const CALLOUT_DIAG  = 15;
 const CALLOUT_HORIZ = 18;
 
 
-type Phase = 'grounded' | 'ascending' | 'cruising' | 'descending' | 'dying';
-
 // Camera snapshot used to position, cull, and render elements in a layer.
 type CameraView = { cameraDeg: number; zoom: number; halfW: number; ppd: number; showCallout: boolean };
 
 // Paired engine/nose colours for a shuttle.
 type ShuttleColors = { warm: number; cool: number };
-
-// Position and velocity at the moment of an explosion trigger.
-type ExplosionOrigin = { deg: number; y: number; vDeg: number; vY: number };
 
 // Minimal world-space position (deg + y).
 type DegY = { deg: number; y: number };
@@ -348,6 +344,7 @@ class Shuttle {
   private readonly maxSpeed: number;
   private readonly config: FlightConfig;
   private readonly engineTrail: EngineTrail;
+  readonly trail: TrailBuffer;
   private readonly engineCfg:   EngineConfig;
   private warmColor: number;
   private coolColor: number;
@@ -385,7 +382,8 @@ class Shuttle {
     this.maxSpeed  = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
     this.warmColor   = colors.warm;
     this.coolColor   = colors.cool;
-    this.engineTrail = new EngineTrail(config.maxTrailPoints);
+    this.trail       = createTrailBuffer(config.maxTrailPoints);
+    this.engineTrail = new EngineTrail(this.trail);
     this.engineCfg   = {
       warmColor:        colors.warm,
       coolColor:        colors.cool,

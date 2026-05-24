@@ -1,8 +1,8 @@
 import type { Graphics } from 'pixi.js';
 import { lerpColor, normalize180 } from '../../math';
 import type { EngineConfig } from './engine-config';
+import { createTrailBuffer, recordTrailPoint, resetTrailBuffer, type TrailBuffer } from '../../shuttle-sim';
 
-type TrailPoint = { deg: number; y: number };
 type BloomSeg   = { ax: number; ay: number; bx: number; by: number; first: boolean };
 type CapSpec    = { x: number; y: number; r: number; angle: number };
 
@@ -68,26 +68,22 @@ function drawBloom(gfx: Graphics, seg: BloomSeg, glow: number, cfg: EngineConfig
 }
 
 export class EngineTrail {
-  private readonly buf: TrailPoint[];
-  private head  = 0;
-  private count = 0;
+  readonly buf: TrailBuffer;
   private clean = true;
 
-  constructor(maxPoints: number) {
-    this.buf = Array.from({ length: maxPoints }, () => ({ deg: 0, y: 0 }));
+  // Accepts either a maxPoints count (allocates its own buffer) or an
+  // externally-owned TrailBuffer (shared with sim code that records points
+  // directly via recordTrailPoint). The externally-owned form is what the
+  // brain/presenter split uses.
+  constructor(arg: number | TrailBuffer) {
+    this.buf = typeof arg === 'number' ? createTrailBuffer(arg) : arg;
   }
 
-  get pointCount(): number { return this.count; }
+  get pointCount(): number { return this.buf.count; }
 
-  record(deg: number, y: number): void {
-    const len  = this.buf.length;
-    this.head  = (this.head - 1 + len) % len;
-    this.buf[this.head].deg = deg;
-    this.buf[this.head].y   = y;
-    if (this.count < len) this.count++;
-  }
+  record(deg: number, y: number): void { recordTrailPoint(this.buf, deg, y); }
 
-  reset(): void { this.head = 0; this.count = 0; }
+  reset(): void { resetTrailBuffer(this.buf); }
 
   ensureClear(gfx: Graphics): void {
     if (!this.clean) { gfx.clear(); this.clean = true; }
@@ -95,24 +91,27 @@ export class EngineTrail {
 
   draw(gfx: Graphics, view: DrawView, cfg: EngineConfig): void {
     const { anchorDeg, anchorY, speedPx, fadeFactor = 1 } = view;
-    if (this.count < 2) { this.ensureClear(gfx); return; }
+    if (this.buf.count < 2) { this.ensureClear(gfx); return; }
 
-    const visLen = Math.min(this.count, Math.floor(speedPx * cfg.trailSpeedFactor));
+    const visLen = Math.min(this.buf.count, Math.floor(speedPx * cfg.trailSpeedFactor));
     if (visLen < 2) { this.ensureClear(gfx); return; }
 
     gfx.clear();
     this.clean = false;
 
-    const len = this.buf.length;
+    const len = this.buf.maxPoints;
+    const degs = this.buf.deg;
+    const ys   = this.buf.y;
+    const head = this.buf.head;
     for (let i = 0; i < visLen - 1; i++) {
-      const ptA  = this.buf[(this.head + i)     % len];
-      const ptB  = this.buf[(this.head + i + 1) % len];
+      const idxA = (head + i)     % len;
+      const idxB = (head + i + 1) % len;
       const t    = 1 - i / (visLen - 1);
       const color = lerpColor(cfg.coolColor, cfg.warmColor, t);
-      const ax   = normalize180(ptA.deg - anchorDeg) * view.ppd;
-      const ay   = ptA.y - anchorY;
-      const bx   = normalize180(ptB.deg - anchorDeg) * view.ppd;
-      const by   = ptB.y - anchorY;
+      const ax   = normalize180(degs[idxA] - anchorDeg) * view.ppd;
+      const ay   = ys[idxA] - anchorY;
+      const bx   = normalize180(degs[idxB] - anchorDeg) * view.ppd;
+      const by   = ys[idxB] - anchorY;
 
       const glow = glowAlpha(t) * cfg.engineIntensity * fadeFactor;
       // Threshold raised from 0.005 → 0.02: bloom below this produces

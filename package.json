@@ -7,7 +7,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "knip": "knip",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -18,10 +20,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.1",
     "eslint": "^10.4.0",
     "knip": "^6.14.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.59.4",
-    "vite": "^8.0.13"
+    "vite": "^8.0.13",
+    "vitest": "^4.1.7"
   }
 }
