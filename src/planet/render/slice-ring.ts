@@ -10,7 +10,19 @@ export type SliceLayoutParams = {
   viewWidthPx: number;
   motionScale: number;
   cullPadPx?:  number;
+  /** Camera speed in this layer's pixel space (px/frame). Used to size the
+   *  pre-warm zone so slices bake their cacheAsTexture off-screen rather than
+   *  in the same frame they enter the viewport. */
+  speedPx?:    number;
 };
+
+// Pre-warm tuning — slices spend ~SAFETY_FRAMES frames in the off-screen warm
+// zone before entering the required zone, giving the per-frame budget time to
+// uncull them without pop-in. MAX_PRE_PAD caps the zone so we don't keep the
+// full world visible during a very fast pan.
+const UNCULL_SAFETY_FRAMES = 4;
+const UNCULL_MAX_PRE_PAD   = 800; // px
+const UNCULL_BUDGET        = 2;   // max new visible=true per frame (pre-warm only)
 
 export class SliceRing {
   readonly container = new Container();
@@ -56,22 +68,48 @@ export class SliceRing {
   }
 
   layout(params: SliceLayoutParams) {
-    const { cameraDeg, zoom, viewWidthPx, motionScale, cullPadPx = 150 } = params;
+    const { cameraDeg, zoom, viewWidthPx, motionScale,
+            cullPadPx = 150, speedPx = 0 } = params;
     const halfW = viewWidthPx / 2;
-    const ppd = this.basePPD * motionScale; // unzoomed coords; zoom is handled by outer container scale
+    const ppd = this.basePPD * motionScale; // unzoomed coords; zoom handled by outer container
     const sliceScreenW = this.degPerSlice * ppd * zoom;
 
+    // Pre-warm zone: extend beyond the required zone proportional to speed so
+    // each slice spends ~SAFETY_FRAMES frames becoming visible off-screen before
+    // entering the required zone. This spreads cacheAsTexture rebakes across
+    // multiple frames instead of spiking them all in one frame during fast pans.
+    const prePadPx = cullPadPx + Math.min(speedPx * UNCULL_SAFETY_FRAMES, UNCULL_MAX_PRE_PAD);
+
+    let newlyVisible = 0;
     for (const slice of this.slices) {
       const relDeg = normalize180(slice.homeDeg - cameraDeg);
       const x = relDeg * ppd;
       const screenX = x * zoom;
-      const visible =
-        screenX + sliceScreenW > -halfW - cullPadPx && screenX < halfW + cullPadPx;
+      const right = screenX + sliceScreenW;
 
-      slice.visible = visible;
-      // Skip the transform write for culled slices — their stale x is unread
-      // while invisible, and writing it dirties the cacheAsTexture render group.
-      if (visible) slice.x = x;
+      if (right > -halfW - cullPadPx && screenX < halfW + cullPadPx) {
+        // Required zone — must be visible, no budget limit. Guarantees no pop-in.
+        slice.visible = true;
+        slice.x = x;
+      } else if (right > -halfW - prePadPx && screenX < halfW + prePadPx) {
+        // Pre-warm zone — stagger new uncull events to spread rebakes.
+        newlyVisible = this.warmSlice(slice, x, newlyVisible);
+      } else {
+        slice.visible = false;
+        // Skip transform write — stale x while invisible doesn't dirty render group.
+      }
     }
+  }
+
+  // Warm up a single slice in the pre-warm zone. Returns the updated budget counter.
+  // Already-visible slices stay visible and get their transform refreshed without
+  // consuming budget — only first-time visibility (= cacheAsTexture rebake) is gated.
+  private warmSlice(slice: Slice, x: number, budget: number): number {
+    if (!slice.visible && budget < UNCULL_BUDGET) {
+      slice.visible = true;
+      return budget + 1;
+    }
+    if (slice.visible) slice.x = x;
+    return budget;
   }
 }

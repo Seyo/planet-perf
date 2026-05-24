@@ -17,7 +17,10 @@ type Toggle = {
   dotEl: HTMLSpanElement;
 };
 
-const FPS_UPDATE_INTERVAL = 20;
+const FPS_UPDATE_INTERVAL   = 20;
+// State fields (xDeg, vDeg, …) throttled separately — xDeg changes every frame
+// during autopan, making it the #1 hotspot in profiles despite the setText guard.
+const STATE_UPDATE_INTERVAL = 6; // ≈10 Hz at 60 fps — debug lag is acceptable
 
 function hexToCss(hex: number, alpha: number): string {
   const r = (hex >> 16) & 0xff;
@@ -41,7 +44,8 @@ export class DebugPanel {
   private themeButtons = new Map<number, HTMLButtonElement>();
   private togglesWrap!: HTMLElement;
   private toggles: Map<string, Toggle> = new Map();
-  private fpsTick = 0;
+  private fpsTick    = 0;
+  private stateTick  = 0;
   private autopanSpeed = 0;
 
   onPaletteChange?: (idx: number) => void;
@@ -142,16 +146,21 @@ export class DebugPanel {
   }
 
   update(state: State): void {
-    this.setText('xDeg',    state.xDeg.toFixed(1) + '°');
-    this.setText('vDeg',    state.vDeg.toFixed(3) + ' °/t');
-    this.setText('cameraY', state.cameraY.toFixed(1) + ' px');
-    this.setText('vY',      state.vY.toFixed(3) + ' px/t');
-    this.setText('zoom',    state.zoom.toFixed(3) + '×');
+    // Position / velocity stats — throttled because xDeg changes every frame
+    // during autopan, making `set textContent` the #1 profiler hotspot otherwise.
+    if (++this.stateTick >= STATE_UPDATE_INTERVAL) {
+      this.stateTick = 0;
+      this.setText('xDeg',    state.xDeg.toFixed(1) + '°');
+      this.setText('vDeg',    state.vDeg.toFixed(3) + ' °/t');
+      this.setText('cameraY', state.cameraY.toFixed(1) + ' px');
+      this.setText('vY',      state.vY.toFixed(3) + ' px/t');
+      this.setText('zoom',    state.zoom.toFixed(3) + '×');
+      this.setText('size',    `${state.viewportW} × ${state.viewportH}`);
+    }
     if (++this.fpsTick >= FPS_UPDATE_INTERVAL) {
       this.fpsTick = 0;
       this.setText('fps', state.fps.toFixed(1));
     }
-    this.setText('size',    `${state.viewportW} × ${state.viewportH}`);
   }
 
   // Skip DOM writes when the formatted value hasn't changed — `set textContent`

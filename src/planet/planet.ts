@@ -228,9 +228,10 @@ export class Planet {
   private layout() {
     const width = this.app.renderer.width;
     const z = this.zoom.zoom;
+    const vd = this.world.vDeg;
 
     for (const layer of this.layers) {
-      layer.layout(this.world.xDeg, z, width, this.world.cameraY);
+      layer.layout({ cameraDeg: this.world.xDeg, zoom: z, viewWidthPx: width, cameraY: this.world.cameraY, vDeg: vd });
     }
     for (const al of this.actorLayers) {
       al.layout(this.world.xDeg, z, width, this.world.cameraY);
