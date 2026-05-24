@@ -323,28 +323,62 @@ export class Planet {
   }
 }
 
-export function makeTaperedFrontLayer(districts: District[], registry?: BuildingRegistry) {
-  const baseColor           = 0x060810;
-  const sliceWidthPxAtZoom1 = 120;
-  const layerKey            = 'front';
-  const emptyFactory = makeEmptySliceFactory({ sliceWidthPxAtZoom1, baseColor });
+type SlicePlan = { sig: string; build: (i: number) => Container };
 
-  const sliceFactoryMap = new Map<number, SliceFactory>();
+const FRONT_BASE_COLOR = 0x060810;
+const FRONT_SLICE_WIDTH = 120;
+const FRONT_LAYER_KEY = 'front';
+const FRONT_EMPTY_SIG = 'e';
+
+function frontSlicePlans(districts: District[], registry: BuildingRegistry | undefined): Map<number, SlicePlan> {
+  const plans = new Map<number, SlicePlan>();
   for (const d of districts) {
     for (let j = 0; j < d.sliceCount; j++) {
+      const i = (d.startSlice + j) % 72;
       const { density, maxH } = sliceTaperParams(j, d.sliceCount, d.taperConfig);
-      sliceFactoryMap.set(
-        (d.startSlice + j) % 72,
-        makeFrontBuildingFactory({ sliceWidthPxAtZoom1, density, maxH, baseColor, registry, layerKey }),
-      );
+      const sig = `f:${density.toFixed(3)}:${Math.round(maxH)}`;
+      const factory = makeFrontBuildingFactory({
+        sliceWidthPxAtZoom1: FRONT_SLICE_WIDTH, density, maxH,
+        baseColor: FRONT_BASE_COLOR, registry, layerKey: FRONT_LAYER_KEY,
+      });
+      plans.set(i, { sig, build: (idx) => factory(idx, 0) });
     }
   }
+  return plans;
+}
 
-  const factory: SliceFactory = (i, deg) => {
-    const f = sliceFactoryMap.get(i);
-    return f ? f(i, deg) : emptyFactory(i, deg);
+function makeFrontEmptyBuild(registry: BuildingRegistry | undefined): (i: number) => Container {
+  const factory = makeEmptySliceFactory({ sliceWidthPxAtZoom1: FRONT_SLICE_WIDTH, baseColor: FRONT_BASE_COLOR });
+  return (i) => {
+    if (registry) registry.register(i, FRONT_LAYER_KEY, []);
+    return factory(i, 0);
   };
-  return new SliceLayer(new SliceRing(72, 5, sliceWidthPxAtZoom1, factory, 2), 1.0, 1.0, 1.0);
+}
+
+export function makeTaperedFrontLayer(districts: District[], registry?: BuildingRegistry) {
+  const plans = frontSlicePlans(districts, registry);
+  const emptyBuild = makeFrontEmptyBuild(registry);
+  const factory: SliceFactory = (i) => {
+    const p = plans.get(i);
+    return p ? p.build(i) : emptyBuild(i);
+  };
+  const ring = new SliceRing(72, 5, FRONT_SLICE_WIDTH, factory, 2);
+  for (let i = 0; i < ring.slices.length; i++) {
+    ring.contentSigs[i] = plans.get(i)?.sig ?? FRONT_EMPTY_SIG;
+  }
+  return new SliceLayer(ring, 1.0, 1.0, 1.0);
+}
+
+export function updateTaperedFrontLayer(layer: SliceLayer, districts: District[], registry?: BuildingRegistry): void {
+  const plans = frontSlicePlans(districts, registry);
+  const emptyBuild = makeFrontEmptyBuild(registry);
+  const ring = layer.ring;
+  for (let i = 0; i < ring.slices.length; i++) {
+    const p = plans.get(i);
+    const sig = p?.sig ?? FRONT_EMPTY_SIG;
+    if (ring.contentSigs[i] === sig) continue;
+    ring.replaceSliceContent(i, p ? p.build(i) : emptyBuild(i), sig);
+  }
 }
 
 export type BackCityConfig = {
@@ -362,45 +396,86 @@ export type BackCityConfig = {
   layerKey?:       string;
 };
 
-export function makeBackCityLayer(config: BackCityConfig = {}, districts?: District[]) {
-  const {
-    motionScale    = 0.97,
-    yMotionScale   = 0.97,
-    baseColor      = 0x060810,
-    density        = 0.85,
-    minH           = 40,
-    maxH           = 280,
-    salt           = 202,
-    underground    = false,
-    undergroundDim = 0,
-    bakeResolution = 1,
-    registry,
-    layerKey,
-  } = config;
+const BACK_SLICE_WIDTH = 120;
+const BACK_EMPTY_SIG = 'e';
 
-  const sliceWidth   = 120;
-  const emptyFactory = makeBackEmptySliceFactory({ sliceWidthPxAtZoom1: sliceWidth });
+type BackResolved = Required<Omit<BackCityConfig, 'registry' | 'layerKey'>> & {
+  registry?: BuildingRegistry;
+  layerKey?: string;
+};
 
-  const sliceFactoryMap = new Map<number, SliceFactory>();
-  for (const d of (districts ?? [])) {
+function resolveBackConfig(config: BackCityConfig): BackResolved {
+  return {
+    motionScale:    config.motionScale    ?? 0.97,
+    yMotionScale:   config.yMotionScale   ?? 0.97,
+    baseColor:      config.baseColor      ?? 0x060810,
+    density:        config.density        ?? 0.85,
+    minH:           config.minH           ?? 40,
+    maxH:           config.maxH           ?? 280,
+    salt:           config.salt           ?? 202,
+    underground:    config.underground    ?? false,
+    undergroundDim: config.undergroundDim ?? 0,
+    bakeResolution: config.bakeResolution ?? 1,
+    registry:       config.registry,
+    layerKey:       config.layerKey,
+  };
+}
+
+function backSlicePlans(districts: District[], cfg: BackResolved): Map<number, SlicePlan> {
+  const plans = new Map<number, SlicePlan>();
+  for (const d of districts) {
     for (let j = 0; j < d.sliceCount; j++) {
+      const i = (d.startSlice + j) % 72;
       const { density: dv, maxH: mH } = proportionalTaperParams(
-        { density, maxH }, j, d.sliceCount, d.taperConfig,
+        { density: cfg.density, maxH: cfg.maxH }, j, d.sliceCount, d.taperConfig,
       );
-      sliceFactoryMap.set(
-        (d.startSlice + j) % 72,
-        makeBackCityFactory({ sliceWidthPxAtZoom1: sliceWidth, baseColor, density: dv, minH, maxH: mH, salt, underground, undergroundDim, registry, layerKey }),
-      );
+      const sig = `b:${dv.toFixed(3)}:${Math.round(mH)}`;
+      const factory = makeBackCityFactory({
+        sliceWidthPxAtZoom1: BACK_SLICE_WIDTH, baseColor: cfg.baseColor, density: dv,
+        minH: cfg.minH, maxH: mH, salt: cfg.salt,
+        underground: cfg.underground, undergroundDim: cfg.undergroundDim,
+        registry: cfg.registry, layerKey: cfg.layerKey,
+      });
+      plans.set(i, { sig, build: (idx) => factory(idx, 0) });
     }
   }
+  return plans;
+}
 
-  const factory: SliceFactory = (i) => {
-    const f = sliceFactoryMap.get(i);
-    return f ? f(i, 0) : emptyFactory(i, 0);
+function makeBackEmptyBuild(cfg: BackResolved): (i: number) => Container {
+  const factory = makeBackEmptySliceFactory({ sliceWidthPxAtZoom1: BACK_SLICE_WIDTH });
+  return (i) => {
+    if (cfg.registry && cfg.layerKey) cfg.registry.register(i, cfg.layerKey, []);
+    return factory(i, 0);
   };
+}
 
-  const ring = new SliceRing(72, 5, sliceWidth, factory, bakeResolution);
-  return new SliceLayer(ring, motionScale, 1.0, yMotionScale);
+export function makeBackCityLayer(config: BackCityConfig = {}, districts?: District[]) {
+  const cfg = resolveBackConfig(config);
+  const plans = backSlicePlans(districts ?? [], cfg);
+  const emptyBuild = makeBackEmptyBuild(cfg);
+  const factory: SliceFactory = (i) => {
+    const p = plans.get(i);
+    return p ? p.build(i) : emptyBuild(i);
+  };
+  const ring = new SliceRing(72, 5, BACK_SLICE_WIDTH, factory, cfg.bakeResolution);
+  for (let i = 0; i < ring.slices.length; i++) {
+    ring.contentSigs[i] = plans.get(i)?.sig ?? BACK_EMPTY_SIG;
+  }
+  return new SliceLayer(ring, cfg.motionScale, 1.0, cfg.yMotionScale);
+}
+
+export function updateBackCityLayer(layer: SliceLayer, config: BackCityConfig, districts: District[]): void {
+  const cfg = resolveBackConfig(config);
+  const plans = backSlicePlans(districts, cfg);
+  const emptyBuild = makeBackEmptyBuild(cfg);
+  const ring = layer.ring;
+  for (let i = 0; i < ring.slices.length; i++) {
+    const p = plans.get(i);
+    const sig = p?.sig ?? BACK_EMPTY_SIG;
+    if (ring.contentSigs[i] === sig) continue;
+    ring.replaceSliceContent(i, p ? p.build(i) : emptyBuild(i), sig);
+  }
 }
 
 export function makeGroundLayer() {

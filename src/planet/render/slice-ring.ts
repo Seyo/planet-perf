@@ -27,6 +27,7 @@ const UNCULL_BUDGET        = 2;   // max new visible=true per frame (pre-warm on
 export class SliceRing {
   readonly container = new Container();
   readonly slices: Slice[] = [];
+  readonly contentSigs: string[] = [];
 
   readonly basePPD: number; // pixels-per-degree at zoom=1 for THIS ring
   constructor(
@@ -34,7 +35,7 @@ export class SliceRing {
     public readonly degPerSlice: number,
     public readonly sliceWidthPxAtZoom1: number,
     private makeSlice: SliceFactory,
-    private readonly bakeResolution = 0,
+    readonly bakeResolution = 0,
   ) {
     this.basePPD = sliceWidthPxAtZoom1 / degPerSlice;
     this.build();
@@ -43,20 +44,18 @@ export class SliceRing {
   private build() {
     this.container.removeChildren();
     this.slices.length = 0;
+    this.contentSigs.length = 0;
 
     for (let i = 0; i < this.sliceCount; i++) {
       const slice = new Container() as Slice;
       slice.homeDeg = i * this.degPerSlice;
-
-      // const marker = new Graphics()
-      //   .rect(-0.5, 0, 1, 1024*2)
-      //   .fill({ color: 0xffffff, alpha: 0.7 });
 
       const content = this.makeSlice(i, slice.homeDeg);
 
       slice.addChild(content);
       this.container.addChild(slice);
       this.slices.push(slice);
+      this.contentSigs.push('');
 
       // Bake the slice's static geometry into a single cached texture. Collapses
       // ~15–20 batched Graphics into one quad, so per-frame batch repacking
@@ -65,6 +64,18 @@ export class SliceRing {
       // in must not animate their content.
       if (this.bakeResolution > 0) slice.cacheAsTexture({ resolution: this.bakeResolution });
     }
+  }
+
+  // Swap a single slice's content in place. Reuses the slice Container, so the
+  // outer scene-graph structure and cacheAsTexture binding are preserved —
+  // only the inner Graphics subtree is reallocated. updateCacheTexture()
+  // signals Pixi to rebake the cached texture from the new content.
+  replaceSliceContent(i: number, content: Container, sig: string): void {
+    const slice = this.slices[i];
+    for (const child of [...slice.children]) child.destroy({ children: true });
+    slice.addChild(content);
+    this.contentSigs[i] = sig;
+    if (this.bakeResolution > 0) slice.updateCacheTexture();
   }
 
   layout(params: SliceLayoutParams) {
