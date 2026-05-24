@@ -188,6 +188,27 @@ class Explosion {
   }
 }
 
+// ─── Shared rendering helper ─────────────────────────────────────────────────
+
+type SegPts  = { ax: number; ay: number; bx: number; by: number };
+type SegFill = { width: number; color: number; alpha: number };
+
+// Renders a line segment as a filled quad instead of a Graphics stroke, avoiding
+// Pixi's toStrokeStyle normalisation which is the dominant cost when drawing many
+// trail segments per frame. Visually identical to stroke with cap:'butt'.
+function fillSegment(gfx: Graphics, pts: SegPts, fill: SegFill): void {
+  const dx = pts.bx - pts.ax;
+  const dy = pts.by - pts.ay;
+  const d  = Math.sqrt(dx * dx + dy * dy);
+  if (d < 0.001) return;
+  const hw = fill.width * 0.5;
+  const nx = (-dy / d) * hw;
+  const ny = ( dx / d) * hw;
+  gfx.poly([pts.ax + nx, pts.ay + ny, pts.bx + nx, pts.by + ny,
+            pts.bx - nx, pts.by - ny, pts.ax - nx, pts.ay - ny])
+     .fill({ color: fill.color, alpha: fill.alpha });
+}
+
 // ─── Debris ───────────────────────────────────────────────────────────────────
 
 class Debris {
@@ -294,14 +315,15 @@ class Debris {
       const by   = this.trailY[idxB] - this.y;
 
       const glow = getDebrisGlowAlpha(t) * spawnFade * this.intensity;
+      const pts: SegPts = { ax, ay, bx, by };
       if (glow > 0.005) {
-        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color, alpha: glow * 0.2,  width: 12 });
-        this.trailGfx.moveTo(ax, ay).lineTo(bx, by).stroke({ color, alpha: glow * 0.45, width: 5  });
+        fillSegment(this.trailGfx, pts, { width: 12, color, alpha: glow * 0.2 });
+        fillSegment(this.trailGfx, pts, { width: 5, color, alpha: glow * 0.45 });
       }
-      this.trailGfx
-        .moveTo(ax, ay)
-        .lineTo(bx, by)
-        .stroke({ color, alpha: Math.min(t * spawnFade * this.intensity, 1), width: this.trailWidth });
+      fillSegment(this.trailGfx, pts, {
+        width: this.trailWidth, color,
+        alpha: Math.min(t * spawnFade * this.intensity, 1),
+      });
     }
   }
 

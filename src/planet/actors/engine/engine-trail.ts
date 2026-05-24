@@ -21,6 +21,26 @@ function bloomLayerAlpha(layer: number, totalLayers: number): number {
   return BLOOM_INNER_ALPHA + (BLOOM_OUTER_ALPHA - BLOOM_INNER_ALPHA) * frac;
 }
 
+type SegPts  = { ax: number; ay: number; bx: number; by: number };
+type SegFill = { width: number; color: number; alpha: number };
+
+// Renders a line segment as a filled quad (4-vertex polygon) rather than a
+// Graphics stroke. Avoids Pixi's toStrokeStyle normalisation on every call,
+// which is the dominant cost when drawing many trail segments per frame.
+// Produces identical visuals to stroke with cap:'butt' (flat ends).
+function fillSegment(gfx: Graphics, pts: SegPts, fill: SegFill): void {
+  const dx = pts.bx - pts.ax;
+  const dy = pts.by - pts.ay;
+  const d  = Math.sqrt(dx * dx + dy * dy);
+  if (d < 0.001) return;
+  const hw = fill.width * 0.5; // perpendicular half-width
+  const nx = (-dy / d) * hw;
+  const ny = ( dx / d) * hw;
+  gfx.poly([pts.ax + nx, pts.ay + ny, pts.bx + nx, pts.by + ny,
+            pts.bx - nx, pts.by - ny, pts.ax - nx, pts.ay - ny])
+     .fill({ color: fill.color, alpha: fill.alpha });
+}
+
 // Draws one forward-facing semicircle (the nose cap) for one bloom layer.
 // The arc sweeps clockwise from (angle - π/2) to (angle + π/2); fill() auto-closes
 // the shape with a straight diameter line.
@@ -41,8 +61,7 @@ function drawBloom(gfx: Graphics, seg: BloomSeg, glow: number, cfg: EngineConfig
     const alpha = glow * bloomLayerAlpha(layer, cfg.bloomLayers);
     if (alpha <= 0.005) continue;
     const w = cfg.trailWidth + 2 + layer;
-    gfx.moveTo(seg.ax, seg.ay).lineTo(seg.bx, seg.by)
-      .stroke({ color: cfg.warmColor, alpha, width: w, cap: 'butt' });
+    fillSegment(gfx, seg, { width: w, color: cfg.warmColor, alpha });
     if (seg.first)
       drawCapSemi(gfx, { x: seg.ax, y: seg.ay, r: w / 2, angle: noseAngle }, cfg.warmColor, alpha);
   }
@@ -98,8 +117,7 @@ export class EngineTrail {
       const glow = glowAlpha(t) * cfg.engineIntensity * fadeFactor;
       if (glow > 0.005) drawBloom(gfx, { ax, ay, bx, by, first: i === 0 }, glow, cfg);
 
-      gfx.moveTo(ax, ay).lineTo(bx, by)
-        .stroke({ color, alpha: t * fadeFactor, width: cfg.trailWidth });
+      fillSegment(gfx, { ax, ay, bx, by }, { width: cfg.trailWidth, color, alpha: t * fadeFactor });
     }
   }
 }
