@@ -109,6 +109,11 @@ export class Planet {
     this.root.addChildAt(newLayer.container, rootIdx);
     this.layers[idx] = newLayer;
     if (this.interactionLayer === old) this.interactionLayer = newLayer;
+    // Invalidate the static-world cache so the incoming layer receives a
+    // layout() call on the very next frame even if the camera hasn't moved.
+    // Without this the guard skips layout and new slices sit at (0,0) until
+    // the user pans.
+    this.lastLayoutXDeg = NaN;
   }
 
   replaceActorLayer(old: ActorLike, next: ActorLike): void {
