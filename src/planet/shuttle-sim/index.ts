@@ -1,5 +1,7 @@
 export type { ShuttleSimState } from './state';
 export { createShuttleSimState } from './state';
+export type { ShuttleTarget, ShuttleWorld } from './world';
+export { EMPTY_WORLD } from './world';
 export type { ExplosionOrigin, ShuttleEvent } from './events';
 export type { TrailBuffer } from './trail-buffer';
 export { createTrailBuffer, recordTrailPoint, resetTrailBuffer } from './trail-buffer';

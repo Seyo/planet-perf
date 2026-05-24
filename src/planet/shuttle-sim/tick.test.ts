@@ -4,6 +4,7 @@ import { SURFACE_Y } from './constants';
 import { createShuttleSimState, type ShuttleSimState } from './state';
 import { tickShuttle, explodeShuttle } from './tick';
 import { createTrailBuffer, type TrailBuffer } from './trail-buffer';
+import { EMPTY_WORLD } from './world';
 
 const BASE_PPD = 24;
 
@@ -24,7 +25,7 @@ function freshTrail(): TrailBuffer {
 function tick(
   state: ShuttleSimState, trail: TrailBuffer, config: FlightConfig, dt = 1,
 ) {
-  return tickShuttle({ state, trail, config, basePPD: BASE_PPD, dt });
+  return tickShuttle({ state, trail, config, world: EMPTY_WORLD, basePPD: BASE_PPD, dt });
 }
 
 describe('tickShuttle', () => {

@@ -1,6 +1,6 @@
 import { SURFACE_Y } from './constants';
 
-type Phase = 'grounded' | 'ascending' | 'cruising' | 'descending' | 'dying';
+export type Phase = 'grounded' | 'ascending' | 'cruising' | 'descending' | 'dying';
 
 // Plain-data shuttle state. All fields the brain reads or writes live here.
 // Pixi sprites/containers stay on the Shuttle wrapper class — see
@@ -32,6 +32,10 @@ export type ShuttleSimState = {
   // tick decrements this; on reaching 0 the brain triggers an explosion.
   // Used for staggered annihilate without setTimeout.
   dyingDelay: number;
+  // When non-null, the brain runs the closed-loop control path and
+  // resolves setpoints from `world.targets.get(targetId)` each tick.
+  // When null, the brain runs the original open-loop FlightPlan logic.
+  targetId: string | null;
   // Per-shuttle invariants set at construction
   readonly maxSpeed: number;
   readonly halfLen:  number;
@@ -57,6 +61,7 @@ export function createShuttleSimState(opts: { deg: number; maxSpeed: number; hal
     dyingTrailLen:  0,
     dyingTrailMax:  0,
     dyingDelay:     0,
+    targetId:       null,
     maxSpeed:       opts.maxSpeed,
     halfLen:        opts.halfLen,
   };

@@ -22,13 +22,28 @@ function lerp(a: number, b: number, t: number): number {
   return a + t * (b - a);
 }
 
+// Cruise altitude as a function of remaining trip distance. Short trips
+// stay low; long trips climb to config.cruiseYMin. Shared between the
+// open-loop FlightPlan and the closed-loop tick (per-frame re-derivation).
+export function altitudeForRange(fullDeg: number, config: FlightConfig): number {
+  const t = Math.min(1, Math.abs(fullDeg) / FULL_ARC_DEG);
+  return lerp(MIN_ALTITUDE, config.cruiseYMin, t * t);
+}
+
+// Cruise speed as a function of remaining trip distance. Short trips
+// cruise slowly; long trips approach config.maxHorizSpeed. Shared between
+// open-loop and closed-loop control.
+export function cruiseSpeedFor(fullDeg: number, config: FlightConfig): number {
+  const t = Math.min(1, Math.abs(fullDeg) / FULL_ARC_DEG);
+  return config.maxHorizSpeed * lerp(MIN_SPEED, 1.0, t);
+}
+
 function planFromDistance(fromDeg: number, toDeg: number, config: FlightConfig, willExplode: boolean): FlightPlan {
   const diff      = normalize180(toDeg - fromDeg);
   const dirSign   = (diff >= 0 ? 1 : -1);
   const fullDeg   = Math.abs(diff);
-  const t         = Math.min(1, fullDeg / FULL_ARC_DEG);
-  const cruiseY   = lerp(MIN_ALTITUDE, config.cruiseYMin, t * t);
-  const cruiseSpeed = config.maxHorizSpeed * lerp(MIN_SPEED, 1.0, t);
+  const cruiseY     = altitudeForRange(fullDeg, config);
+  const cruiseSpeed = cruiseSpeedFor(fullDeg, config);
   const brakeDeg    = estimateDescentDeg(config, cruiseY, cruiseSpeed);
   return { cruiseY, cruiseSpeed, dirSign, landingDeg: toDeg, cruiseDegLimit: Math.max(0, fullDeg - brakeDeg), willExplode };
 }

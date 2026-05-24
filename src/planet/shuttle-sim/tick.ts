@@ -1,16 +1,21 @@
 import { clamp, normalize180 } from '../math';
+import { altitudeForRange, cruiseSpeedFor } from './flight-plan';
 import { estimateDescentDeg, type FlightConfig } from './physics';
 import {
   DESCENT_PD_GAIN, LANDING_MISS_DEG, MAX_OVERSHOOTS, SAFE_LANDING_ACCEL_FRAMES, SURFACE_Y,
 } from './constants';
-import type { ShuttleSimState } from './state';
+import type { Phase, ShuttleSimState } from './state';
 import type { ExplosionOrigin, ShuttleEvent } from './events';
 import { recordTrailPoint, type TrailBuffer } from './trail-buffer';
+import { EMPTY_WORLD, type ShuttleWorld } from './world';
 
 export type TickInputs = {
   state:   ShuttleSimState;
   trail:   TrailBuffer;
   config:  FlightConfig;
+  // Per-tick world snapshot. Carries targets the brain may chase when
+  // state.targetId is non-null. Wrapper passes EMPTY_WORLD if nothing is set.
+  world:   ShuttleWorld;
   // Degrees-per-pixel conversion used for trajectory anchoring at explosion
   // time. Comes from the layer's parallax depth, not from FlightConfig.
   basePPD: number;
@@ -23,6 +28,7 @@ type Ctx = {
   state:   ShuttleSimState;
   trail:   TrailBuffer;
   config:  FlightConfig;
+  world:   ShuttleWorld;
   basePPD: number;
   events:  ShuttleEvent[];
 };
@@ -30,11 +36,17 @@ type Ctx = {
 // Pure shuttle brain. Mutates state + trail in place. Returns events the
 // wrapper must react to (spawn explosions, schedule respawns, etc).
 //
-// Grounded phase is intentionally NOT handled here — launch needs the
-// wrapper's pickTarget/planFn closures. That moves into the brain in Phase E
-// once both are RNG-injected.
+// Two control modes coexist:
+//   - state.targetId === null → open-loop: pre-baked FlightPlan executed
+//     via counter-based phase transitions (advancePhase + arc-turn).
+//   - state.targetId !== null → closed-loop: setpoints re-derived per tick
+//     from world.targets, phase inferred from current geometry. Smoothly
+//     handles a moving target without changing applyPhysics.
+//
+// Grounded phase is NOT handled here — launch needs the wrapper's
+// pickTarget/planFn closures.
 export function tickShuttle(input: TickInputs): ShuttleEvent[] {
-  const { state, trail, config, basePPD, dt } = input;
+  const { state, trail, config, world, basePPD, dt } = input;
   const events: ShuttleEvent[] = [];
 
   if (state.phase === 'grounded') return events;
@@ -42,13 +54,64 @@ export function tickShuttle(input: TickInputs): ShuttleEvent[] {
 
   // Flying phases (ascending, cruising, descending)
   state.flyingFrames += dt;
-  const ctx: Ctx = { state, trail, config, basePPD, events };
-  if (checkDyingDelay(ctx, dt))                return events;
-  if (checkExplodeAfterFrames(state, config))  { triggerExplosion(ctx); return events; }
-  applyPhysics(state, config, dt);
-  if (advancePhase(ctx, dt))                   return events;
-  recordTrailPoint(trail, state.deg, state.y);
+  const ctx: Ctx = { state, trail, config, world, basePPD, events };
+  if (state.targetId !== null) tickClosedLoop(ctx, dt);
+  else                         tickOpenLoop(ctx, dt);
   return events;
+}
+
+function tickOpenLoop(ctx: Ctx, dt: number): void {
+  if (checkDyingDelay(ctx, dt))                                  return;
+  if (checkExplodeAfterFrames(ctx.state, ctx.config))            { triggerExplosion(ctx); return; }
+  applyPhysics(ctx.state, ctx.config, dt);
+  if (advancePhase(ctx, dt))                                     return;
+  recordTrailPoint(ctx.trail, ctx.state.deg, ctx.state.y);
+}
+
+function tickClosedLoop(ctx: Ctx, dt: number): void {
+  if (checkDyingDelay(ctx, dt))                                  return;
+  if (checkExplodeAfterFrames(ctx.state, ctx.config))            { triggerExplosion(ctx); return; }
+  updateSetpoints(ctx);
+  ctx.state.phase = inferPhase(ctx.state, ctx.config);
+  applyPhysics(ctx.state, ctx.config, dt);
+  if (ctx.state.phase === 'descending' && ctx.state.y >= SURFACE_Y - ctx.config.landThreshold) {
+    tryLand(ctx);
+    return;
+  }
+  recordTrailPoint(ctx.trail, ctx.state.deg, ctx.state.y);
+}
+
+// Re-derive setpoints from the live target each tick. Missing target
+// (e.g. removed mid-flight) is a no-op — shuttle keeps its last setpoints
+// and gracefully completes its trajectory.
+function updateSetpoints(ctx: Ctx): void {
+  const { state, world, config } = ctx;
+  const target = state.targetId !== null ? world.targets.get(state.targetId) : undefined;
+  if (!target) return;
+
+  const remainDeg = normalize180(target.deg - state.deg);
+  const absRemain = Math.abs(remainDeg);
+  // Predict where the target will be when we arrive — simple linear lead.
+  // Guard against zero speed so eta stays finite while the shuttle reverses.
+  const eta     = absRemain / Math.max(0.01, Math.abs(state.vDeg));
+  const leadDeg = ((target.deg + target.vDeg * eta) % 360 + 360) % 360;
+
+  state.landingDeg  = leadDeg;
+  state.dirSign     = (normalize180(leadDeg - state.deg) >= 0 ? 1 : -1);
+  state.cruiseY     = altitudeForRange(absRemain, config);
+  state.cruiseSpeed = cruiseSpeedFor(absRemain, config);
+}
+
+// Phase from current geometry, not from counters. The shuttle "wants" to
+// be at cruiseY whenever cruising; "wants" to descend when remaining
+// distance falls below braking range. ascending fills the gap.
+function inferPhase(state: ShuttleSimState, config: FlightConfig): Phase {
+  if (state.landingDeg === null) return state.phase;
+  const remainDeg = Math.abs(normalize180(state.landingDeg - state.deg));
+  const brakeDeg  = estimateDescentDeg(config, state.cruiseY, state.cruiseSpeed);
+  if (remainDeg <= brakeDeg)                                     return 'descending';
+  if (Math.abs(state.y - state.cruiseY) > config.levelThreshold) return 'ascending';
+  return 'cruising';
 }
 
 function tickDying(state: ShuttleSimState, dt: number, events: ShuttleEvent[]): void {
@@ -69,13 +132,14 @@ function checkDyingDelay(ctx: Ctx, dt: number): boolean {
 
 // Public escape hatch for outside callers (debug annihilate, scripted spawns)
 // that need to detonate a flying shuttle. Returns the same event stream the
-// internal brain would emit, so the wrapper handles it uniformly.
+// internal brain would emit, so the wrapper handles it uniformly. World is
+// irrelevant here — detonation doesn't read setpoints — so EMPTY_WORLD.
 export function explodeShuttle(
   state: ShuttleSimState, trail: TrailBuffer, config: FlightConfig, basePPD: number,
 ): ShuttleEvent[] {
   if (state.phase === 'grounded' || state.phase === 'dying') return [];
   const events: ShuttleEvent[] = [];
-  triggerExplosion({ state, trail, config, basePPD, events });
+  triggerExplosion({ state, trail, config, world: EMPTY_WORLD, basePPD, events });
   return events;
 }
 

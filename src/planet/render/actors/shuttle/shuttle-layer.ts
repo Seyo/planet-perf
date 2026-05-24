@@ -4,9 +4,9 @@ import { mulberry32 } from '../../rng';
 import { EngineTrail, type EngineConfig } from '../../../actors/engine';
 import {
   createShuttleSimState, createTrailBuffer, distanceFlightPlan, explodeShuttle, tickShuttle,
-  DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, SURFACE_Y,
+  DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, EMPTY_WORLD, SURFACE_Y,
   type ExplosionConfig, type ExplosionOrigin, type FlightConfig, type FlightPlanFn,
-  type ShuttleEvent, type ShuttleSimState, type TrailBuffer,
+  type ShuttleEvent, type ShuttleSimState, type ShuttleTarget, type ShuttleWorld, type TrailBuffer,
 } from '../../../shuttle-sim';
 
 const BASE_PPD = 24;
@@ -443,14 +443,14 @@ class Shuttle {
     for (const e of events) this.handleEvent(e);
   }
 
-  update(tick: Tick): void {
+  update(tick: Tick, world: ShuttleWorld): void {
     const s = this.state;
     if (s.phase === 'grounded') {
       s.waitTicks -= tick.dt;
       if (s.waitTicks <= 0) this.launch();
       return;
     }
-    const events = tickShuttle({ state: s, trail: this.trail, config: this.config, basePPD: BASE_PPD, dt: tick.dt });
+    const events = tickShuttle({ state: s, trail: this.trail, config: this.config, world, basePPD: BASE_PPD, dt: tick.dt });
     for (const e of events) this.handleEvent(e);
     if (this.isFlying) this.bodyGfx.rotation = Math.atan2(s.vY, s.vDeg * BASE_PPD);
   }
@@ -539,6 +539,10 @@ export class ShuttleLayer {
   private readonly allDebris:  Debris[]    = [];
   private readonly districtHolder: DistrictHolder;
   private readonly rng: () => number;
+  // Per-layer registry of live targets the closed-loop brain can chase.
+  // Keyed by id (e.g. 'cursor' from ShuttleTester). Populated via
+  // setTesterTarget; consumed by tickShuttle through the world snapshot.
+  private readonly testerTargets = new Map<string, ShuttleTarget>();
 
   constructor(init: ShuttleLayerInit, debugToggle: { visible: boolean }) {
     this.motionScale    = init.motionScale;
@@ -654,10 +658,19 @@ export class ShuttleLayer {
     this.spawnAirExplosion({ ...pos, vDeg: 0, vY: 0 }, cfg);
   }
 
-  spawnShuttleAt(deg: number, cfg: FlightConfig): void {
+  spawnShuttleAt(deg: number, cfg: FlightConfig, opts?: { targetId?: string }): void {
     const s = new Shuttle(this.colors, 'tester', cfg, { rng: this.rng, startDeg: deg });
+    if (opts?.targetId) s.state.targetId = opts.targetId;
     this.shuttles.push(s);
     this.container.addChild(s.gfx);
+  }
+
+  // Register or remove a live target the closed-loop brain can chase.
+  // Passing null removes the entry; existing shuttles with that targetId
+  // gracefully fall through to their last known setpoints.
+  setTesterTarget(id: string, target: ShuttleTarget | null): void {
+    if (target === null) this.testerTargets.delete(id);
+    else                 this.testerTargets.set(id, target);
   }
 
   clearShuttles(): void {
@@ -666,6 +679,7 @@ export class ShuttleLayer {
       s.gfx.destroy({ children: true });
     }
     this.shuttles.length = 0;
+    this.testerTargets.clear();
   }
 
   private tickDebris(tick: Tick): void {
@@ -697,8 +711,14 @@ export class ShuttleLayer {
 
   update(dt: number) {
     const tick: Tick = { dt };
+    // One world snapshot per frame, shared by every shuttle in this layer.
+    // EMPTY_WORLD is reused when no tester targets are registered to avoid
+    // per-frame Map allocation in the common case.
+    const world: ShuttleWorld = this.testerTargets.size === 0
+      ? EMPTY_WORLD
+      : { targets: this.testerTargets };
     for (const s of this.shuttles) {
-      s.update(tick);
+      s.update(tick, world);
       if (s.pendingExplosion) {
         this.spawnAirExplosion(s.pendingExplosion);
         s.pendingExplosion = null;
