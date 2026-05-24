@@ -1,5 +1,5 @@
-import type { FlightConfig } from '../planet/render/actors/shuttle/physics';
-import { DEFAULT_FLIGHT_CONFIG } from '../planet/render/actors/shuttle/physics';
+import type { FlightConfig } from '../planet/shuttle-sim';
+import { DEFAULT_FLIGHT_CONFIG } from '../planet/shuttle-sim';
 
 type SliderSpec = {
   key:   keyof FlightConfig;

@@ -5,3 +5,7 @@ export type { TrailBuffer } from './trail-buffer';
 export { createTrailBuffer, recordTrailPoint, resetTrailBuffer } from './trail-buffer';
 export { tickShuttle, explodeShuttle } from './tick';
 export { SURFACE_Y } from './constants';
+export type { FlightConfig, ExplosionConfig } from './physics';
+export { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG } from './physics';
+export type { FlightPlanFn } from './flight-plan';
+export { distanceFlightPlan } from './flight-plan';

@@ -1,5 +1,5 @@
-import type { ExplosionConfig } from '../planet/render/actors/shuttle/physics';
-import { DEFAULT_EXPLOSION_CONFIG } from '../planet/render/actors/shuttle/physics';
+import type { ExplosionConfig } from '../planet/shuttle-sim';
+import { DEFAULT_EXPLOSION_CONFIG } from '../planet/shuttle-sim';
 
 type SliderSpec = {
   key:   keyof ExplosionConfig;

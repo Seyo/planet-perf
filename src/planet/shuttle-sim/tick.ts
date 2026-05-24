@@ -1,5 +1,5 @@
 import { clamp, normalize180 } from '../math';
-import { estimateDescentDeg, type FlightConfig } from '../render/actors/shuttle/physics';
+import { estimateDescentDeg, type FlightConfig } from './physics';
 import {
   DESCENT_PD_GAIN, LANDING_MISS_DEG, MAX_OVERSHOOTS, SAFE_LANDING_ACCEL_FRAMES, SURFACE_Y,
 } from './constants';

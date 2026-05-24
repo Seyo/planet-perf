@@ -1,12 +1,12 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { normalize180, clamp, lerpColor } from "../../../math";
-import { DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, type FlightConfig, type ExplosionConfig } from './physics';
-import { distanceFlightPlan, type FlightPlanFn } from './flight-plan';
+import { mulberry32 } from '../../rng';
 import { EngineTrail, type EngineConfig } from '../../../actors/engine';
 import {
-  createShuttleSimState, createTrailBuffer, explodeShuttle, tickShuttle,
-  SURFACE_Y,
-  type ExplosionOrigin, type ShuttleEvent, type ShuttleSimState, type TrailBuffer,
+  createShuttleSimState, createTrailBuffer, distanceFlightPlan, explodeShuttle, tickShuttle,
+  DEFAULT_FLIGHT_CONFIG, DEFAULT_EXPLOSION_CONFIG, SURFACE_Y,
+  type ExplosionConfig, type ExplosionOrigin, type FlightConfig, type FlightPlanFn,
+  type ShuttleEvent, type ShuttleSimState, type TrailBuffer,
 } from '../../../shuttle-sim';
 
 const BASE_PPD = 24;
@@ -17,16 +17,16 @@ const MIN_CRUISE_DEG            = 15; // minimum trip distance
 type DistrictRange = { readonly startDeg: number; readonly endDeg: number };
 type CruisePicker = (deg: number) => { toDeg: number } | null;
 
-function pickFromDistrict(districts: readonly DistrictRange[], depIdx: number): { startDeg: number; endDeg: number } {
+function pickFromDistrict(districts: readonly DistrictRange[], depIdx: number, rng: () => number): { startDeg: number; endDeg: number } {
   const candidates = districts.filter((_, i) => i !== depIdx);
   return candidates.length > 0
-    ? candidates[Math.floor(Math.random() * candidates.length)]
-    : districts[Math.floor(Math.random() * districts.length)];
+    ? candidates[Math.floor(rng() * candidates.length)]
+    : districts[Math.floor(rng() * districts.length)];
 }
 
-function pickDegInDistricts(districts: readonly DistrictRange[]): number {
-  const d = districts[Math.floor(Math.random() * districts.length)];
-  return d.startDeg + Math.random() * (d.endDeg - d.startDeg);
+function pickDegInDistricts(districts: readonly DistrictRange[], rng: () => number): number {
+  const d = districts[Math.floor(rng() * districts.length)];
+  return d.startDeg + rng() * (d.endDeg - d.startDeg);
 }
 
 function inAnyDistrict(deg: number, districts: readonly DistrictRange[]): boolean {
@@ -34,7 +34,7 @@ function inAnyDistrict(deg: number, districts: readonly DistrictRange[]): boolea
   return districts.some(d => norm >= d.startDeg && norm < d.endDeg);
 }
 
-function enforceMinDist(fromNorm: number, toDeg: number, districts: readonly DistrictRange[]): number {
+function enforceMinDist(fromNorm: number, toDeg: number, districts: readonly DistrictRange[], rng: () => number): number {
   const diff = normalize180(toDeg - fromNorm);
   if (Math.abs(diff) >= MIN_CRUISE_DEG) return toDeg;
   const sign = diff >= 0 ? 1 : -1;
@@ -42,20 +42,20 @@ function enforceMinDist(fromNorm: number, toDeg: number, districts: readonly Dis
   if (inAnyDistrict(fwd, districts)) return fwd;
   const bwd  = ((fromNorm - sign  * MIN_CRUISE_DEG) % 360 + 360) % 360;
   if (inAnyDistrict(bwd, districts)) return bwd;
-  return pickDegInDistricts(districts);
+  return pickDegInDistricts(districts, rng);
 }
 
 type DistrictHolder = { districts: readonly DistrictRange[] };
 
-function makeCruisePicker(holder: DistrictHolder): CruisePicker {
+function makeCruisePicker(holder: DistrictHolder, rng: () => number): CruisePicker {
   return (deg: number): { toDeg: number } | null => {
     const { districts } = holder;
     if (districts.length === 0) return null;
     const norm   = ((deg % 360) + 360) % 360;
     const depIdx = districts.findIndex(d => norm >= d.startDeg && norm < d.endDeg);
-    const target = districts.length === 1 ? districts[0] : pickFromDistrict(districts, depIdx);
-    const toDeg  = target.startDeg + Math.random() * (target.endDeg - target.startDeg);
-    return { toDeg: enforceMinDist(norm, toDeg, districts) };
+    const target = districts.length === 1 ? districts[0] : pickFromDistrict(districts, depIdx, rng);
+    const toDeg  = target.startDeg + rng() * (target.endDeg - target.startDeg);
+    return { toDeg: enforceMinDist(norm, toDeg, districts, rng) };
   };
 }
 
@@ -347,6 +347,7 @@ class Shuttle {
   private readonly pickTarget: CruisePicker | undefined;
   private readonly respawnDeg: (() => number) | undefined;
   private readonly planFn: FlightPlanFn;
+  private readonly rng: () => number;
 
   // Layer code still reads these directly off the shuttle; getters keep the
   // public surface stable while state moves to ShuttleSimState.
@@ -354,14 +355,15 @@ class Shuttle {
   get y():         number  { return this.state.y; }
   get isFlying():  boolean { return this.state.phase !== 'grounded' && this.state.phase !== 'dying'; }
 
-  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, init?: { startDeg?: number; pickTarget?: CruisePicker; respawnDeg?: () => number; planFn?: FlightPlanFn }) {
+  constructor(colors: ShuttleColors, label: string, config: FlightConfig = DEFAULT_FLIGHT_CONFIG, init: { rng: () => number; startDeg?: number; pickTarget?: CruisePicker; respawnDeg?: () => number; planFn?: FlightPlanFn }) {
     this.config      = config;
-    this.pickTarget  = init?.pickTarget;
-    this.respawnDeg  = init?.respawnDeg;
-    this.planFn      = init?.planFn ?? distanceFlightPlan;
-    const startDeg   = init?.startDeg ?? Math.random() * 360;
-    const halfLen    = config.bodyHalfLenMin + Math.random() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
-    const maxSpeed   = config.maxHorizSpeed * (0.75 + Math.random() * 0.5);
+    this.rng         = init.rng;
+    this.pickTarget  = init.pickTarget;
+    this.respawnDeg  = init.respawnDeg;
+    this.planFn      = init.planFn ?? distanceFlightPlan;
+    const startDeg   = init.startDeg ?? this.rng() * 360;
+    const halfLen    = config.bodyHalfLenMin + this.rng() * (config.bodyHalfLenMax - config.bodyHalfLenMin);
+    const maxSpeed   = config.maxHorizSpeed * (0.75 + this.rng() * 0.5);
     this.state       = createShuttleSimState({ deg: startDeg, halfLen, maxSpeed });
     this.warmColor   = colors.warm;
     this.coolColor   = colors.cool;
@@ -412,7 +414,7 @@ class Shuttle {
     s.y            = SURFACE_Y;
     s.flyingFrames = 0;
     s.waitTicks    = this.config.waitTicksMin
-      + Math.floor(Math.random() * (this.config.waitTicksMax - this.config.waitTicksMin));
+      + Math.floor(this.rng() * (this.config.waitTicksMax - this.config.waitTicksMin));
     this.engineTrail.reset();
     this.bodyGfx.visible  = true;
     this.bodyGfx.rotation = 0;
@@ -421,7 +423,7 @@ class Shuttle {
   private launch(): void {
     const s = this.state;
     const toDeg = this.pickTarget?.(s.deg)?.toDeg ?? null;
-    const plan  = this.planFn(s.deg, toDeg, this.config);
+    const plan  = this.planFn(s.deg, toDeg, this.config, this.rng);
     s.cruiseY        = plan.cruiseY;
     s.cruiseSpeed    = s.maxSpeed * (plan.cruiseSpeed / this.config.maxHorizSpeed);
     s.dirSign        = plan.dirSign;
@@ -464,7 +466,7 @@ class Shuttle {
       return;
     }
     // 'respawn-ready'
-    this.state.deg = this.respawnDeg ? this.respawnDeg() : Math.random() * 360;
+    this.state.deg = this.respawnDeg ? this.respawnDeg() : this.rng() * 360;
     this.startWait();
   }
 
@@ -515,7 +517,14 @@ class Shuttle {
 
 // ─── ShuttleLayer ─────────────────────────────────────────────────────────────
 
-type ShuttleLayerSpec = { motionScale: number; yMotionScale: number; label: string; districts?: readonly DistrictRange[]; planFn?: FlightPlanFn };
+type ShuttleLayerSpec = {
+  motionScale:   number;
+  yMotionScale:  number;
+  label:         string;
+  districts?:    readonly DistrictRange[];
+  planFn?:       FlightPlanFn;
+  seed?:         number;
+};
 type ShuttleLayerInit = ShuttleLayerSpec & { count: number };
 
 export class ShuttleLayer {
@@ -529,6 +538,7 @@ export class ShuttleLayer {
   private readonly explosions: Explosion[] = [];
   private readonly allDebris:  Debris[]    = [];
   private readonly districtHolder: DistrictHolder;
+  private readonly rng: () => number;
 
   constructor(init: ShuttleLayerInit, debugToggle: { visible: boolean }) {
     this.motionScale    = init.motionScale;
@@ -536,16 +546,21 @@ export class ShuttleLayer {
     this.debugToggle    = debugToggle;
     this.ppd            = BASE_PPD * init.motionScale;
     this.districtHolder = { districts: init.districts ?? [] };
+    // Per-layer seeded RNG. Same seed → identical sim for replay / tests.
+    // Missing seed falls back to a one-shot Math.random; gives variety
+    // across instances while keeping each layer internally deterministic.
+    this.rng = mulberry32(init.seed ?? Math.floor(Math.random() * 1e9));
     const holder        = this.districtHolder;
-    const picker        = makeCruisePicker(holder);
+    const rng           = this.rng;
+    const picker        = makeCruisePicker(holder, rng);
     const respawnDeg    = () => {
       const { districts } = holder;
-      return districts.length > 0 ? pickDegInDistricts(districts) : Math.random() * 360;
+      return districts.length > 0 ? pickDegInDistricts(districts, rng) : rng() * 360;
     };
     this.shuttles = Array.from({ length: init.count }, () => {
       const { districts } = holder;
-      const startDeg = districts.length > 0 ? pickDegInDistricts(districts) : undefined;
-      return new Shuttle(this.colors, init.label, DEFAULT_FLIGHT_CONFIG, { startDeg, pickTarget: picker, respawnDeg, planFn: init.planFn });
+      const startDeg = districts.length > 0 ? pickDegInDistricts(districts, rng) : undefined;
+      return new Shuttle(this.colors, init.label, DEFAULT_FLIGHT_CONFIG, { rng, startDeg, pickTarget: picker, respawnDeg, planFn: init.planFn });
     });
     for (const s of this.shuttles) this.container.addChild(s.gfx);
   }
@@ -570,25 +585,26 @@ export class ShuttleLayer {
     this.container.addChild(exp.gfx);
     this.explosions.push(exp);
 
+    const rng = this.rng;
     const count = cfg.debrisCountMin
-      + Math.floor(Math.random() * (cfg.debrisCountMax - cfg.debrisCountMin + 1));
+      + Math.floor(rng() * (cfg.debrisCountMax - cfg.debrisCountMin + 1));
     for (let i = 0; i < count; i++) {
       const scattered: ExplosionOrigin = {
         deg:  origin.deg,
         y:    origin.y,
-        vDeg: origin.vDeg * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.02,
-        vY:   origin.vY   * (0.5 + Math.random()) + (Math.random() * 2 - 1) * 0.4,
+        vDeg: origin.vDeg * (0.5 + rng()) + (rng() * 2 - 1) * 0.02,
+        vY:   origin.vY   * (0.5 + rng()) + (rng() * 2 - 1) * 0.4,
       };
-      const willFizzle = Math.random() < cfg.debrisFizzleChance;
+      const willFizzle = rng() < cfg.debrisFizzleChance;
       const piece: DebrisPieceConfig = {
         fizzleFrames: willFizzle
           ? cfg.debrisFizzleFramesMin
-            + Math.random() * (cfg.debrisFizzleFramesMax - cfg.debrisFizzleFramesMin)
+            + rng() * (cfg.debrisFizzleFramesMax - cfg.debrisFizzleFramesMin)
           : null,
         intensity:  cfg.debrisIntensityMin
-          + Math.random() * (cfg.debrisIntensityMax - cfg.debrisIntensityMin),
+          + rng() * (cfg.debrisIntensityMax - cfg.debrisIntensityMin),
         trailWidth: cfg.debrisTrailWidthMin
-          + Math.random() * (cfg.debrisTrailWidthMax - cfg.debrisTrailWidthMin),
+          + rng() * (cfg.debrisTrailWidthMax - cfg.debrisTrailWidthMin),
       };
       const debris = new Debris(scattered, piece);
       this.container.addChild(debris.gfx);
@@ -606,7 +622,7 @@ export class ShuttleLayer {
     let flyingCount = 0;
     for (const s of this.shuttles) if (s.isFlying) flyingCount++;
     if (flyingCount === 0) return null;
-    let pick = Math.floor(Math.random() * flyingCount);
+    let pick = Math.floor(this.rng() * flyingCount);
     for (const s of this.shuttles) {
       if (!s.isFlying) continue;
       if (pick === 0) return s;
@@ -636,7 +652,7 @@ export class ShuttleLayer {
   }
 
   spawnShuttleAt(deg: number, cfg: FlightConfig): void {
-    const s = new Shuttle(this.colors, 'tester', cfg, { startDeg: deg });
+    const s = new Shuttle(this.colors, 'tester', cfg, { rng: this.rng, startDeg: deg });
     this.shuttles.push(s);
     this.container.addChild(s.gfx);
   }
@@ -743,6 +759,9 @@ export function makeShuttleLayer(
   spec: ShuttleLayerSpec,
   debugToggle: { visible: boolean },
 ): ShuttleLayer {
-  const count = 2 + Math.floor(Math.random() * 3);
+  // Use the spec's seed (if any) to pick the count too — keeps the whole
+  // layer deterministic given a seed. Non-seeded path stays as before.
+  const countRng = spec.seed !== undefined ? mulberry32(spec.seed) : Math.random;
+  const count = 2 + Math.floor(countRng() * 3);
   return new ShuttleLayer({ ...spec, count }, debugToggle);
 }

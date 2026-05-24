@@ -15,7 +15,8 @@ import {
   type BackCityConfig,
 } from "./planet/planet";
 import { makeActorLayer, initCarTextures, ActorLayer, type ActorLayerConfig, type DistrictRange } from "./planet/render/actor-layer";
-import { makeShuttleLayer, ShuttleLayer, distanceFlightPlan, type FlightPlanFn } from "./planet/render/actors";
+import { makeShuttleLayer, ShuttleLayer } from "./planet/render/actors";
+import { distanceFlightPlan, type FlightPlanFn } from "./planet/shuttle-sim";
 import { LayoutPanel } from "./debug/layout-panel";
 import { DebugPanel } from "./debug/debug-panel";
 import { UserPanel } from "./ui";

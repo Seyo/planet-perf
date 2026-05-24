@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_FLIGHT_CONFIG, type FlightConfig,
-} from '../render/actors/shuttle/physics';
+import { DEFAULT_FLIGHT_CONFIG, type FlightConfig } from './physics';
 import { SURFACE_Y } from './constants';
 import { createShuttleSimState, type ShuttleSimState } from './state';
 import { tickShuttle, explodeShuttle } from './tick';

@@ -63,13 +63,13 @@ export const DEFAULT_FLIGHT_CONFIG: FlightConfig = {
   explodeAfterFrames:      0,
 };
 
-const DESCENT_PD_GAIN = 0.008;
+const DESCENT_PD_GAIN_LOCAL = 0.008;
 
 export function estimateDescentDeg(config: FlightConfig, cruiseY: number, speed: number): number {
   const h = -2 - cruiseY;
   let y = cruiseY, vY = 0, vDeg = speed, dist = 0;
   for (let i = 0; i < 2000; i++) {
-    const targetVY = Math.max(-config.maxClimbRate, Math.min(config.maxDescentRate, (-2 - y) * DESCENT_PD_GAIN));
+    const targetVY = Math.max(-config.maxClimbRate, Math.min(config.maxDescentRate, (-2 - y) * DESCENT_PD_GAIN_LOCAL));
     vY   += Math.max(-config.maxVertAccel, Math.min(config.maxVertAccel, targetVY - vY));
     y    += vY;
     if (y >= -2 - config.landThreshold) break;
