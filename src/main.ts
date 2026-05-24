@@ -283,8 +283,17 @@ function applyStructuralLayers(districts: District[]): void {
   for (const entry of actorEntries) entry.layer.reconcile(actorDists, entry.config);
   const shuttlesEnabled = shuttlesActive(districts);
   for (const e of shuttleEntries) {
-    if (!shuttlesEnabled) { e.layer.clearShuttles(); e.layer.container.visible = false; }
-    else rebuildShuttleEntry(e, actorDists);
+    if (!shuttlesEnabled) {
+      e.layer.clearShuttles();
+      e.layer.container.visible = false;
+    } else if (e.layer.hasShuttles) {
+      // District layout changed but shuttles exist — update routing without resetting.
+      e.layer.updateDistricts(actorDists);
+      e.layer.container.visible = true;
+    } else {
+      // First activation (or after a clear) — build shuttles from scratch.
+      rebuildShuttleEntry(e, actorDists);
+    }
   }
 }
 

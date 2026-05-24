@@ -45,9 +45,12 @@ function enforceMinDist(fromNorm: number, toDeg: number, districts: readonly Dis
   return pickDegInDistricts(districts);
 }
 
-function makeCruisePicker(districts: readonly DistrictRange[]): CruisePicker | undefined {
-  if (districts.length === 0) return undefined;
+type DistrictHolder = { districts: readonly DistrictRange[] };
+
+function makeCruisePicker(holder: DistrictHolder): CruisePicker {
   return (deg: number): { toDeg: number } | null => {
+    const { districts } = holder;
+    if (districts.length === 0) return null;
     const norm   = ((deg % 360) + 360) % 360;
     const depIdx = districts.findIndex(d => norm >= d.startDeg && norm < d.endDeg);
     const target = districts.length === 1 ? districts[0] : pickFromDistrict(districts, depIdx);
@@ -645,17 +648,23 @@ export class ShuttleLayer {
   private colors: ShuttleColors = { warm: 0xffee66, cool: 0x88ccff };
   private readonly explosions: Explosion[] = [];
   private readonly allDebris:  Debris[]    = [];
+  private readonly districtHolder: DistrictHolder;
 
   constructor(init: ShuttleLayerInit, debugToggle: { visible: boolean }) {
-    this.motionScale  = init.motionScale;
-    this.yMotionScale = init.yMotionScale;
-    this.debugToggle  = debugToggle;
-    this.ppd          = BASE_PPD * init.motionScale;
-    const picker      = init.districts ? makeCruisePicker(init.districts) : undefined;
-    const districts   = init.districts;
-    const respawnDeg  = districts ? () => pickDegInDistricts(districts) : undefined;
-    this.shuttles     = Array.from({ length: init.count }, () => {
-      const startDeg = init.districts ? pickDegInDistricts(init.districts) : undefined;
+    this.motionScale    = init.motionScale;
+    this.yMotionScale   = init.yMotionScale;
+    this.debugToggle    = debugToggle;
+    this.ppd            = BASE_PPD * init.motionScale;
+    this.districtHolder = { districts: init.districts ?? [] };
+    const holder        = this.districtHolder;
+    const picker        = makeCruisePicker(holder);
+    const respawnDeg    = () => {
+      const { districts } = holder;
+      return districts.length > 0 ? pickDegInDistricts(districts) : Math.random() * 360;
+    };
+    this.shuttles = Array.from({ length: init.count }, () => {
+      const { districts } = holder;
+      const startDeg = districts.length > 0 ? pickDegInDistricts(districts) : undefined;
       return new Shuttle(this.colors, init.label, DEFAULT_FLIGHT_CONFIG, { startDeg, pickTarget: picker, respawnDeg, planFn: init.planFn });
     });
     for (const s of this.shuttles) this.container.addChild(s.gfx);
@@ -663,6 +672,13 @@ export class ShuttleLayer {
 
   get layerPpd():          number { return this.ppd; }
   get layerYMotionScale(): number { return this.yMotionScale; }
+  get hasShuttles():       boolean { return this.shuttles.length > 0; }
+
+  /** Replace the routing districts without interrupting in-flight shuttles.
+   *  Shuttles finish their current trip, then pick from the new layout. */
+  updateDistricts(newDistricts: readonly DistrictRange[]): void {
+    this.districtHolder.districts = newDistricts;
+  }
 
   setLightColors(colors: ShuttleColors) {
     this.colors = colors;
