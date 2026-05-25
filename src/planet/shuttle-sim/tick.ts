@@ -1,8 +1,9 @@
 import { clamp, normalize180 } from '../math';
-import { altitudeForRange, cruiseSpeedFor } from './flight-plan';
+import { cruiseSpeedFor } from './flight-plan';
 import { estimateDescentDeg, type FlightConfig } from './physics';
 import {
-  DESCENT_PD_GAIN, LANDING_MISS_DEG, MAX_OVERSHOOTS, SAFE_LANDING_ACCEL_FRAMES, SURFACE_Y,
+  DESCENT_PD_GAIN, LANDING_MISS_DEG, MAX_LEAD_TICKS, MAX_OVERSHOOTS,
+  SAFE_LANDING_ACCEL_FRAMES, SLOWDOWN_DEG, SURFACE_Y,
 } from './constants';
 import type { Phase, ShuttleSimState } from './state';
 import type { ExplosionOrigin, ShuttleEvent } from './events';
@@ -68,16 +69,18 @@ function tickOpenLoop(ctx: Ctx, dt: number): void {
   recordTrailPoint(ctx.trail, ctx.state.deg, ctx.state.y);
 }
 
+// Closed-loop hover: shuttle settles at (target.deg, target.y) and tracks
+// the cursor; never emits 'landed'. Phase is two-state in this path —
+// 'ascending' while off-altitude, 'cruising' once at altitude. There is
+// deliberately no 'descending' branch: applyPhysics's descending branch
+// pulls toward SURFACE_Y, which would make the shuttle dive to the ground
+// instead of holding at the cursor.
 function tickClosedLoop(ctx: Ctx, dt: number): void {
   if (checkDyingDelay(ctx, dt))                                  return;
   if (checkExplodeAfterFrames(ctx.state, ctx.config))            { triggerExplosion(ctx); return; }
   updateSetpoints(ctx);
   ctx.state.phase = inferPhase(ctx.state, ctx.config);
   applyPhysics(ctx.state, ctx.config, dt);
-  if (ctx.state.phase === 'descending' && ctx.state.y >= SURFACE_Y - ctx.config.landThreshold) {
-    tryLand(ctx);
-    return;
-  }
   recordTrailPoint(ctx.trail, ctx.state.deg, ctx.state.y);
 }
 
@@ -91,25 +94,27 @@ function updateSetpoints(ctx: Ctx): void {
 
   const remainDeg = normalize180(target.deg - state.deg);
   const absRemain = Math.abs(remainDeg);
-  // Predict where the target will be when we arrive — simple linear lead.
-  // Guard against zero speed so eta stays finite while the shuttle reverses.
-  const eta     = absRemain / Math.max(0.01, Math.abs(state.vDeg));
+  // Lead the target: predict where it'll be when we arrive. eta is capped
+  // because state.vDeg → 0 on final approach (via the taper below) would
+  // otherwise explode the lead distance to infinity.
+  const eta     = Math.min(MAX_LEAD_TICKS, absRemain / Math.max(0.01, Math.abs(state.vDeg)));
   const leadDeg = ((target.deg + target.vDeg * eta) % 360 + 360) % 360;
 
   state.landingDeg  = leadDeg;
   state.dirSign     = (normalize180(leadDeg - state.deg) >= 0 ? 1 : -1);
-  state.cruiseY     = altitudeForRange(absRemain, config);
-  state.cruiseSpeed = cruiseSpeedFor(absRemain, config);
+  // Cruise at the target's altitude so the shuttle settles on the cursor
+  // XY, not on the ground beneath it.
+  state.cruiseY     = target.y;
+  // Taper horizontal speed to zero within SLOWDOWN_DEG of the target so
+  // the shuttle decelerates into a hover instead of orbiting.
+  state.cruiseSpeed = cruiseSpeedFor(absRemain, config) * Math.min(1, absRemain / SLOWDOWN_DEG);
 }
 
-// Phase from current geometry, not from counters. The shuttle "wants" to
-// be at cruiseY whenever cruising; "wants" to descend when remaining
-// distance falls below braking range. ascending fills the gap.
+// Closed-loop phase machine. Two-state: off-altitude → 'ascending' (slow
+// horizontal motion while climbing/descending to cruiseY), at altitude →
+// 'cruising' (full horizontal speed, tapered near target). No 'descending'
+// branch — see tickClosedLoop comment.
 function inferPhase(state: ShuttleSimState, config: FlightConfig): Phase {
-  if (state.landingDeg === null) return state.phase;
-  const remainDeg = Math.abs(normalize180(state.landingDeg - state.deg));
-  const brakeDeg  = estimateDescentDeg(config, state.cruiseY, state.cruiseSpeed);
-  if (remainDeg <= brakeDeg)                                     return 'descending';
   if (Math.abs(state.y - state.cruiseY) > config.levelThreshold) return 'ascending';
   return 'cruising';
 }

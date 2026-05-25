@@ -23,9 +23,9 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 // Cruise altitude as a function of remaining trip distance. Short trips
-// stay low; long trips climb to config.cruiseYMin. Shared between the
-// open-loop FlightPlan and the closed-loop tick (per-frame re-derivation).
-export function altitudeForRange(fullDeg: number, config: FlightConfig): number {
+// stay low; long trips climb to config.cruiseYMin. Used only by the
+// open-loop FlightPlan path; closed-loop reads cruiseY from the target.
+function altitudeForRange(fullDeg: number, config: FlightConfig): number {
   const t = Math.min(1, Math.abs(fullDeg) / FULL_ARC_DEG);
   return lerp(MIN_ALTITUDE, config.cruiseYMin, t * t);
 }

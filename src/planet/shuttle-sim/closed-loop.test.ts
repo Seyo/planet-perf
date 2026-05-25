@@ -52,13 +52,32 @@ function runUntilLandedOrCap(
 }
 
 describe('tickShuttle closed-loop (targetId set)', () => {
-  it('lands at a stationary target within LANDING_MISS_DEG', () => {
+  it('settles within LANDING_MISS_DEG of a stationary target after sustained tracking', () => {
     const state = makeFlyingState();
-    const world = makeWorld({ t: { deg: 60, y: SURFACE_Y, vDeg: 0 } });
-    const { landed, ticks } = runUntilLandedOrCap(state, world, DEFAULT_FLIGHT_CONFIG);
-    expect(landed).toBe(true);
+    const targetY = -150;
+    const world = makeWorld({ t: { deg: 60, y: targetY, vDeg: 0 } });
+    const trail = createTrailBuffer(100);
+    // Closed-loop is hover-mode: no 'landed' event is emitted. Tick long
+    // enough for the PD physics to settle on the target XY, then assert
+    // position.
+    for (let i = 0; i < 1500; i++) {
+      tickShuttle({ state, trail, config: DEFAULT_FLIGHT_CONFIG, world, basePPD: BASE_PPD, dt: DT });
+    }
     expect(Math.abs(normalize180(state.deg - 60))).toBeLessThanOrEqual(LANDING_MISS_DEG);
-    expect(ticks).toBeLessThan(MAX_TICKS);
+    expect(Math.abs(state.y - targetY)).toBeLessThanOrEqual(20);
+  });
+
+  it('cruises at the target altitude, not the ground', () => {
+    const state = makeFlyingState();
+    const targetY = -300;
+    const world = makeWorld({ t: { deg: 60, y: targetY, vDeg: 0 } });
+    const trail = createTrailBuffer(100);
+    for (let i = 0; i < 1500; i++) {
+      tickShuttle({ state, trail, config: DEFAULT_FLIGHT_CONFIG, world, basePPD: BASE_PPD, dt: DT });
+    }
+    // Must settle near target altitude, not near SURFACE_Y.
+    expect(Math.abs(state.y - targetY)).toBeLessThanOrEqual(20);
+    expect(state.y).toBeLessThan(SURFACE_Y - 50); // not anywhere near the ground
   });
 
   it('leads a target moving away — landingDeg sits ahead of target.deg', () => {
