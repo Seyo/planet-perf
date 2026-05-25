@@ -115,12 +115,15 @@ export class SliceRing {
   // Warm up a single slice in the pre-warm zone. Returns the updated budget counter.
   // Already-visible slices stay visible and get their transform refreshed without
   // consuming budget — only first-time visibility (= cacheAsTexture rebake) is gated.
+  // x must be written in the same frame visible flips on, otherwise the slice
+  // renders for one frame at its stale (or default 0 = screen-center) position.
   private warmSlice(slice: Slice, x: number, budget: number): number {
-    if (!slice.visible && budget < UNCULL_BUDGET) {
+    if (!slice.visible) {
+      if (budget >= UNCULL_BUDGET) return budget;
       slice.visible = true;
-      return budget + 1;
+      budget++;
     }
-    if (slice.visible) slice.x = x;
+    slice.x = x;
     return budget;
   }
 }
