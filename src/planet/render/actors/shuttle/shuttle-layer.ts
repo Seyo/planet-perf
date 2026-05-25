@@ -779,12 +779,16 @@ export class ShuttleLayer {
 }
 
 export function makeShuttleLayer(
-  spec: ShuttleLayerSpec,
+  spec: ShuttleLayerSpec & { count?: number },
   debugToggle: { visible: boolean },
 ): ShuttleLayer {
-  // Use the spec's seed (if any) to pick the count too — keeps the whole
-  // layer deterministic given a seed. Non-seeded path stays as before.
-  const countRng = spec.seed !== undefined ? mulberry32(spec.seed) : Math.random;
-  const count = 2 + Math.floor(countRng() * 3);
+  // Explicit count wins; otherwise pick 2..4 from the seeded RNG so the
+  // whole layer stays deterministic. Pass count: 0 for a tester-only
+  // layer with no auto-spawned shuttles.
+  let count = spec.count;
+  if (count === undefined) {
+    const countRng = spec.seed !== undefined ? mulberry32(spec.seed) : Math.random;
+    count = 2 + Math.floor(countRng() * 3);
+  }
   return new ShuttleLayer({ ...spec, count }, debugToggle);
 }

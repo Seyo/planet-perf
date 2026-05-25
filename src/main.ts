@@ -183,6 +183,22 @@ const frontHazeContainer = makeHazeOverlay({ alpha: 0.25, color: PALETTES[DEFAUL
 hazeEntries.push({ container: frontHazeContainer, alpha: 0.25, bottomAlpha: 0 });
 planet.addOverlay(frontHazeContainer, 1.0);
 
+// Dedicated front-layer shuttle host for the ShuttleTester. Lives at the
+// same parallax as the cursor (motionScale = 1.0) so spawned shuttles stay
+// visually aligned with the click position and follow-cursor target.
+// count: 0 → no auto-spawning; only tester spawns land here.
+const frontShuttleLayer = makeShuttleLayer({
+  motionScale:  1.0,
+  yMotionScale: 1.0,
+  label:        'front',
+  districts:    ACTOR_DISTRICTS,
+  planFn:       distanceFlightPlan,
+  count:        0,
+}, shuttleDebugToggle);
+shuttleEntries.push({ layer: frontShuttleLayer, motionScale: 1.0, yMotionScale: 1.0, label: 'front', planFn: distanceFlightPlan });
+shuttleLayers.push(frontShuttleLayer);
+planet.addActorLayer(frontShuttleLayer);
+
 planet.finalize();
 
 if (!shuttlesActive(getDistricts())) {
@@ -368,12 +384,13 @@ const testBlock       = new TestBlockLayer();
 testBlock.container.visible = false;
 planet.addActorLayer(testBlock);
 
-// Frontmost shuttle layer — its ppd/yMotionScale are the correct parallax basis.
-const frontShuttle = (): ShuttleLayer | undefined => shuttleLayers[shuttleLayers.length - 1];
-explosionTester.onSpawn  = (deg, y, cfg)        => { frontShuttle()?.spawnExplosionAt({ deg, y }, cfg); };
-shuttleTester.onSpawn    = (deg, cfg, opts)     => { frontShuttle()?.spawnShuttleAt(deg, cfg, opts); };
-shuttleTester.onClear    = ()                   => { for (const sl of shuttleLayers) sl.clearShuttles(); };
-shuttleTester.onSetTarget = (id, target)        => { frontShuttle()?.setTesterTarget(id, target); };
+// Tester spawns and cursor-tracking live on frontShuttleLayer (motionScale
+// 1.0) so they stay visually aligned with the cursor regardless of camera
+// pan or zoom.
+explosionTester.onSpawn   = (deg, y, cfg)    => { frontShuttleLayer.spawnExplosionAt({ deg, y }, cfg); };
+shuttleTester.onSpawn     = (deg, cfg, opts) => { frontShuttleLayer.spawnShuttleAt(deg, cfg, opts); };
+shuttleTester.onClear     = ()               => { for (const sl of shuttleLayers) sl.clearShuttles(); };
+shuttleTester.onSetTarget = (id, target)     => { frontShuttleLayer.setTesterTarget(id, target); };
 
 const updateCursor = () => {
   app.canvas.style.cursor =
@@ -381,18 +398,15 @@ const updateCursor = () => {
 };
 
 // Convert a canvas pointer event into (deg, y) world coords using the
-// frontmost shuttle layer's parallax. Returns null when no shuttle layer
-// exists (early boot path).
-function pointerToWorld(e: { clientX: number; clientY: number }): { deg: number; y: number } | null {
-  const shuttle = frontShuttle();
-  if (!shuttle) return null;
+// front shuttle layer's parallax basis.
+function pointerToWorld(e: { clientX: number; clientY: number }): { deg: number; y: number } {
   const rect = app.canvas.getBoundingClientRect();
   const dpr  = window.devicePixelRatio;
   const cx   = (e.clientX - rect.left) * dpr;
   const cy   = (e.clientY - rect.top)  * dpr;
   const zoom = planet.zoomLevel;
-  const deg  = planet.xDeg + (cx - app.renderer.width / 2) / (shuttle.layerPpd * zoom);
-  const y    = cy / zoom + planet.cameraY * shuttle.layerYMotionScale;
+  const deg  = planet.xDeg + (cx - app.renderer.width / 2) / (frontShuttleLayer.layerPpd * zoom);
+  const y    = cy / zoom + planet.cameraY * frontShuttleLayer.layerYMotionScale;
   return { deg, y };
 }
 
@@ -413,7 +427,6 @@ app.canvas.addEventListener('click', (e) => {
   if (!e.ctrlKey) return;
   if (!explosionTester.isVisible && !shuttleTester.isVisible) return;
   const w = pointerToWorld(e);
-  if (!w) return;
   if (explosionTester.isVisible) explosionTester.spawnAt(w.deg, w.y);
   if (shuttleTester.isVisible)   shuttleTester.spawnAt(w.deg, w.y);
 });
@@ -424,7 +437,7 @@ app.canvas.addEventListener('click', (e) => {
 app.canvas.addEventListener('pointermove', (e) => {
   if (!shuttleTester.isVisible) return;
   const w = pointerToWorld(e);
-  if (w) shuttleTester.onPointerMove(w.deg, w.y);
+  shuttleTester.onPointerMove(w.deg, w.y);
 });
 
 layoutPanel.onLayoutChange = applyDistricts;
