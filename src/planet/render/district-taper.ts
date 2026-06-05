@@ -1,9 +1,12 @@
 type TaperShape = 'linear' | 'smooth' | 'quad';
 
+export type DistrictKind = 'metropolis' | 'industrial-heavy';
+
 export type District = {
   startSlice: number;
   sliceCount: number;
   taperConfig: TaperConfig;
+  kind?: DistrictKind;
 };
 
 export type TaperConfig = {

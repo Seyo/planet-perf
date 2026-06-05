@@ -10,9 +10,10 @@ export interface ActorLike {
 import { SliceLayer } from "./render/slice-layer";
 import { SliceRing } from "./render/slice-ring";
 import type { SliceFactory } from "./render/slice-ring";
-import { makeBackCityFactory, makeBackEmptySliceFactory, makeEmptySliceFactory, makeFrontBuildingFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
+import { makeBackEmptySliceFactory, makeEmptySliceFactory, makeGroundSectionFactory, makeShallowCaveFactory, makeSkyGradientFactory } from "./render/layer-factories";
 import { sliceTaperParams, proportionalTaperParams, type District } from "./render/district-taper";
-export type { TaperConfig, District } from "./render/district-taper";
+import { getDistrictStyle } from "./render/districts";
+export type { TaperConfig, District, DistrictKind } from "./render/district-taper";
 export { districtMass } from "./render/district-taper";
 import type { BuildingRegistry } from "./render/buildings";
 
@@ -333,11 +334,12 @@ const FRONT_EMPTY_SIG = 'e';
 function frontSlicePlans(districts: District[], registry: BuildingRegistry | undefined): Map<number, SlicePlan> {
   const plans = new Map<number, SlicePlan>();
   for (const d of districts) {
+    const style = getDistrictStyle(d.kind);
     for (let j = 0; j < d.sliceCount; j++) {
       const i = (d.startSlice + j) % 72;
       const { density, maxH } = sliceTaperParams(j, d.sliceCount, d.taperConfig);
-      const sig = `f:${density.toFixed(3)}:${Math.round(maxH)}`;
-      const factory = makeFrontBuildingFactory({
+      const sig = `f:${style.key}:${density.toFixed(3)}:${Math.round(maxH)}`;
+      const factory = style.makeFrontFactory({
         sliceWidthPxAtZoom1: FRONT_SLICE_WIDTH, density, maxH,
         baseColor: FRONT_BASE_COLOR, registry, layerKey: FRONT_LAYER_KEY,
       });
@@ -424,13 +426,14 @@ function resolveBackConfig(config: BackCityConfig): BackResolved {
 function backSlicePlans(districts: District[], cfg: BackResolved): Map<number, SlicePlan> {
   const plans = new Map<number, SlicePlan>();
   for (const d of districts) {
+    const style = getDistrictStyle(d.kind);
     for (let j = 0; j < d.sliceCount; j++) {
       const i = (d.startSlice + j) % 72;
       const { density: dv, maxH: mH } = proportionalTaperParams(
         { density: cfg.density, maxH: cfg.maxH }, j, d.sliceCount, d.taperConfig,
       );
-      const sig = `b:${dv.toFixed(3)}:${Math.round(mH)}`;
-      const factory = makeBackCityFactory({
+      const sig = `b:${style.key}:${dv.toFixed(3)}:${Math.round(mH)}`;
+      const factory = style.makeBackFactory({
         sliceWidthPxAtZoom1: BACK_SLICE_WIDTH, baseColor: cfg.baseColor, density: dv,
         minH: cfg.minH, maxH: mH, salt: cfg.salt,
         underground: cfg.underground, undergroundDim: cfg.undergroundDim,

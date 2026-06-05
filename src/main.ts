@@ -247,7 +247,8 @@ function rebuildShuttleEntry(e: ShuttleEntry, actorDists: readonly DistrictRange
 function districtBoundaryKey(districts: District[]): string {
   return districts.map(d => {
     const densityTier = (Math.round(d.taperConfig.centerDensity * 4) / 4).toFixed(2);
-    return `${d.startSlice}:${d.sliceCount}:${densityTier}`;
+    const kind = d.kind ?? 'metropolis';
+    return `${d.startSlice}:${d.sliceCount}:${densityTier}:${kind}`;
   }).join('|');
 }
 
