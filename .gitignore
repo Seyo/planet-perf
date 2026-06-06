@@ -1,2 +1,5 @@
 node_modules/
 dist/
+.claude/settings.local.json
+graphify-out/cost.json
+graphify-out/cache/

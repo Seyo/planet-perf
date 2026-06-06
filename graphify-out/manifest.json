@@ -1,0 +1,432 @@
+{
+  "C:\\Users\\emiln\\code\\planet-perf\\.claude\\settings.local.json": {
+    "mtime": 1780777272.9308374,
+    "ast_hash": "b35f9c4f2193c76827c1ac34bcc3cd2d",
+    "semantic_hash": "b35f9c4f2193c76827c1ac34bcc3cd2d"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\eslint.config.js": {
+    "mtime": 1779483077.4741778,
+    "ast_hash": "c09277114df617e89e61a95a255b62c4",
+    "semantic_hash": "c09277114df617e89e61a95a255b62c4"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\knip.json": {
+    "mtime": 1779482197.2449267,
+    "ast_hash": "1ecd22f3b9026c6d691721eae6924749",
+    "semantic_hash": "1ecd22f3b9026c6d691721eae6924749"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\package.json": {
+    "mtime": 1779641257.7406402,
+    "ast_hash": "c7f13a7de922126ea6f5241079b5dd09",
+    "semantic_hash": "c7f13a7de922126ea6f5241079b5dd09"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\building-bounds-overlay.ts": {
+    "mtime": 1779448221.1149743,
+    "ast_hash": "b705aec0b33e422719eca4ad69e81413",
+    "semantic_hash": "b705aec0b33e422719eca4ad69e81413"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\debug-panel.ts": {
+    "mtime": 1779615920.1740277,
+    "ast_hash": "cb3f946fbbc5379b4e7bb280233ecf7f",
+    "semantic_hash": "cb3f946fbbc5379b4e7bb280233ecf7f"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\engine-tester.ts": {
+    "mtime": 1779483111.3844965,
+    "ast_hash": "c3270551708d14fad190e310d3febcf4",
+    "semantic_hash": "c3270551708d14fad190e310d3febcf4"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\explosion-tester.ts": {
+    "mtime": 1779642478.2048783,
+    "ast_hash": "cf3d37caa841a30dd3f47efc3e73bb0d",
+    "semantic_hash": "cf3d37caa841a30dd3f47efc3e73bb0d"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\layout-panel.ts": {
+    "mtime": 1779776869.364019,
+    "ast_hash": "119be049c274e33610860a326d47c02c",
+    "semantic_hash": "119be049c274e33610860a326d47c02c"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\palettes.ts": {
+    "mtime": 1779481993.593764,
+    "ast_hash": "03ef4436a81ae301ad5b4cd86d49d644",
+    "semantic_hash": "03ef4436a81ae301ad5b4cd86d49d644"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\screen-overlays.ts": {
+    "mtime": 1779190836.539822,
+    "ast_hash": "d5a74fcc1677d440b493d0c130942426",
+    "semantic_hash": "d5a74fcc1677d440b493d0c130942426"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\debug\\shuttle-tester.ts": {
+    "mtime": 1779649807.5962334,
+    "ast_hash": "45b5fac5c38b327a96694d74b13c210d",
+    "semantic_hash": "45b5fac5c38b327a96694d74b13c210d"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\main.ts": {
+    "mtime": 1779729452.2258615,
+    "ast_hash": "fd3d4432fc025e3ddb8bfe4668b3f474",
+    "semantic_hash": "fd3d4432fc025e3ddb8bfe4668b3f474"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\actors\\engine\\engine-config.ts": {
+    "mtime": 1779342638.3137152,
+    "ast_hash": "4c966ed7449edcabe0d3993ed34b0b6b",
+    "semantic_hash": "4c966ed7449edcabe0d3993ed34b0b6b"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\actors\\engine\\engine-trail.ts": {
+    "mtime": 1779641492.5172305,
+    "ast_hash": "d74a68fa882d57b7d5cd796075528070",
+    "semantic_hash": "d74a68fa882d57b7d5cd796075528070"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\actors\\engine\\index.ts": {
+    "mtime": 1779482077.538333,
+    "ast_hash": "1adce1a1644b63f94bc0030b8c9471d5",
+    "semantic_hash": "1adce1a1644b63f94bc0030b8c9471d5"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\actors\\engine\\test-block-layer.ts": {
+    "mtime": 1779483126.0511892,
+    "ast_hash": "edc8e12f581f8ee6cf8ced32ae928d50",
+    "semantic_hash": "edc8e12f581f8ee6cf8ced32ae928d50"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\growth\\convert.ts": {
+    "mtime": 1779558121.4406981,
+    "ast_hash": "7b209521be83d2c6a0cfd328400a2231",
+    "semantic_hash": "7b209521be83d2c6a0cfd328400a2231"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\growth\\index.ts": {
+    "mtime": 1779555042.8766356,
+    "ast_hash": "7beac640ce5c42b5168e10ef94711a88",
+    "semantic_hash": "7beac640ce5c42b5168e10ef94711a88"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\growth\\seed.ts": {
+    "mtime": 1779556672.7023983,
+    "ast_hash": "c20f2f86181451aca0077742e64a8bdb",
+    "semantic_hash": "c20f2f86181451aca0077742e64a8bdb"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\growth\\tick.test.ts": {
+    "mtime": 1779641296.2903883,
+    "ast_hash": "4617aa6e3577797d7abc266c323872dd",
+    "semantic_hash": "4617aa6e3577797d7abc266c323872dd"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\growth\\tick.ts": {
+    "mtime": 1779560771.5917215,
+    "ast_hash": "fb8c921236fed810aa898ee8bc273052",
+    "semantic_hash": "fb8c921236fed810aa898ee8bc273052"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\growth\\types.ts": {
+    "mtime": 1779556718.804521,
+    "ast_hash": "19a4f1e14221c2e980013ac23e4003be",
+    "semantic_hash": "19a4f1e14221c2e980013ac23e4003be"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\input\\pointer-x.ts": {
+    "mtime": 1779482588.8341925,
+    "ast_hash": "806d5cbc8f22071664ce76098a9280d2",
+    "semantic_hash": "806d5cbc8f22071664ce76098a9280d2"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\input\\wheel-zoom.ts": {
+    "mtime": 1779215061.266926,
+    "ast_hash": "2040296e4dcddd006ea011f15edf3ebb",
+    "semantic_hash": "2040296e4dcddd006ea011f15edf3ebb"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\math.ts": {
+    "mtime": 1779286372.373144,
+    "ast_hash": "fcd6583b3926a651c9912f61bc0a4c82",
+    "semantic_hash": "fcd6583b3926a651c9912f61bc0a4c82"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\planet.ts": {
+    "mtime": 1779729446.5518608,
+    "ast_hash": "186a5bb207d9498da30d49b6a067378e",
+    "semantic_hash": "186a5bb207d9498da30d49b6a067378e"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\actor-layer.ts": {
+    "mtime": 1779615885.815326,
+    "ast_hash": "90d8a24497232c81df85811929715639",
+    "semantic_hash": "90d8a24497232c81df85811929715639"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\actors\\index.ts": {
+    "mtime": 1779642488.0457416,
+    "ast_hash": "b63a04b171b269641fb18134c7901356",
+    "semantic_hash": "b63a04b171b269641fb18134c7901356"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\actors\\shuttle\\index.ts": {
+    "mtime": 1779642487.6203,
+    "ast_hash": "959f08c05f74305c25bdbcf6873e53f7",
+    "semantic_hash": "959f08c05f74305c25bdbcf6873e53f7"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\actors\\shuttle\\shuttle-layer.ts": {
+    "mtime": 1779650413.401736,
+    "ast_hash": "1e5cf9bb07f80dc397fd869010922b97",
+    "semantic_hash": "1e5cf9bb07f80dc397fd869010922b97"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\buildings\\core.ts": {
+    "mtime": 1779563278.5101948,
+    "ast_hash": "1359638244516f0598aa33935102fef7",
+    "semantic_hash": "1359638244516f0598aa33935102fef7"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\buildings\\decorations.ts": {
+    "mtime": 1779482156.313681,
+    "ast_hash": "31e8874083eaab11fe3a7f2859da4db8",
+    "semantic_hash": "31e8874083eaab11fe3a7f2859da4db8"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\buildings\\index.ts": {
+    "mtime": 1779563285.4145901,
+    "ast_hash": "b48ad94c571d2942026612811185e3fa",
+    "semantic_hash": "b48ad94c571d2942026612811185e3fa"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\buildings\\registry.ts": {
+    "mtime": 1779483163.136701,
+    "ast_hash": "af3dbfc3b1545fce6ea7824798dc30bc",
+    "semantic_hash": "af3dbfc3b1545fce6ea7824798dc30bc"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\district-label-layer.ts": {
+    "mtime": 1779561717.1511781,
+    "ast_hash": "cf687db71544d1d7ef0f816cf9623577",
+    "semantic_hash": "cf687db71544d1d7ef0f816cf9623577"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\district-taper.ts": {
+    "mtime": 1779729231.2794814,
+    "ast_hash": "dfe8f1ceebf333e711c0640c58be319c",
+    "semantic_hash": "dfe8f1ceebf333e711c0640c58be319c"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\districts\\index.ts": {
+    "mtime": 1779729577.8061202,
+    "ast_hash": "6596912a0badafadc7c817ce43a3a56e",
+    "semantic_hash": "6596912a0badafadc7c817ce43a3a56e"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\districts\\industrial-heavy.ts": {
+    "mtime": 1779729925.5929773,
+    "ast_hash": "92fc29d2eb7bb441de94225a339e7a3e",
+    "semantic_hash": "92fc29d2eb7bb441de94225a339e7a3e"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\districts\\metropolis.ts": {
+    "mtime": 1779729248.0614512,
+    "ast_hash": "d2c04e33e50c9ab50784b353bb52f570",
+    "semantic_hash": "d2c04e33e50c9ab50784b353bb52f570"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\districts\\types.ts": {
+    "mtime": 1779729241.496514,
+    "ast_hash": "23ee210e443629088b9e32ff54e30df3",
+    "semantic_hash": "23ee210e443629088b9e32ff54e30df3"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\layer-factories.ts": {
+    "mtime": 1779563308.504143,
+    "ast_hash": "30551165c09172b88db212d08c7f1033",
+    "semantic_hash": "30551165c09172b88db212d08c7f1033"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\rng.ts": {
+    "mtime": 1779194596.185934,
+    "ast_hash": "af0d045acc42e1cd223be5496105fe81",
+    "semantic_hash": "af0d045acc42e1cd223be5496105fe81"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\slice-layer.ts": {
+    "mtime": 1779605390.605988,
+    "ast_hash": "2eb6f8b8da307ea64204cf8d5ea578b6",
+    "semantic_hash": "2eb6f8b8da307ea64204cf8d5ea578b6"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\render\\slice-ring.ts": {
+    "mtime": 1779679888.6347446,
+    "ast_hash": "7daaf1539eacf768d0dd5515aecc21a3",
+    "semantic_hash": "7daaf1539eacf768d0dd5515aecc21a3"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\closed-loop.test.ts": {
+    "mtime": 1779679311.3965044,
+    "ast_hash": "3c48546c8ee310370b349444247d513e",
+    "semantic_hash": "3c48546c8ee310370b349444247d513e"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\constants.ts": {
+    "mtime": 1779679251.8340163,
+    "ast_hash": "a2624556409f011cfedbc10c1ac1d2fa",
+    "semantic_hash": "a2624556409f011cfedbc10c1ac1d2fa"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\events.ts": {
+    "mtime": 1779641779.8476758,
+    "ast_hash": "a560422276e833141e622376e8382e92",
+    "semantic_hash": "a560422276e833141e622376e8382e92"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\flight-plan.test.ts": {
+    "mtime": 1779642701.532766,
+    "ast_hash": "609347e250e8a5689fbd4f5ba44d3876",
+    "semantic_hash": "609347e250e8a5689fbd4f5ba44d3876"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\flight-plan.ts": {
+    "mtime": 1779679294.978001,
+    "ast_hash": "123583cc13ffafc17847ded168679b69",
+    "semantic_hash": "123583cc13ffafc17847ded168679b69"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\index.ts": {
+    "mtime": 1779649344.1031544,
+    "ast_hash": "5a5b03ff9a543992da5bff0ad90bf3a7",
+    "semantic_hash": "5a5b03ff9a543992da5bff0ad90bf3a7"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\physics.ts": {
+    "mtime": 1779642432.8765297,
+    "ast_hash": "8c4c91bb4897a7b94cecee4c67296c8d",
+    "semantic_hash": "8c4c91bb4897a7b94cecee4c67296c8d"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\state.ts": {
+    "mtime": 1779649408.334192,
+    "ast_hash": "44822a0d887820215941d9db4829fedf",
+    "semantic_hash": "44822a0d887820215941d9db4829fedf"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\tick.test.ts": {
+    "mtime": 1779649477.4506004,
+    "ast_hash": "6a2f8cd07bc7165b965525525e6e8dc4",
+    "semantic_hash": "6a2f8cd07bc7165b965525525e6e8dc4"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\tick.ts": {
+    "mtime": 1779679282.9337997,
+    "ast_hash": "9cecd98e8d6be6629ca888eb57c47fb9",
+    "semantic_hash": "9cecd98e8d6be6629ca888eb57c47fb9"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\trail-buffer.ts": {
+    "mtime": 1779641462.785227,
+    "ast_hash": "9ba32238ceef5e47aaf9f347c075ead1",
+    "semantic_hash": "9ba32238ceef5e47aaf9f347c075ead1"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\planet\\shuttle-sim\\world.ts": {
+    "mtime": 1779649333.9428859,
+    "ast_hash": "9bfa537b74dba192924f79cb93f867b3",
+    "semantic_hash": "9bfa537b74dba192924f79cb93f867b3"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\playground.ts": {
+    "mtime": 1779347839.6542504,
+    "ast_hash": "f4420517147f775a112dc69057cff8ec",
+    "semantic_hash": "f4420517147f775a112dc69057cff8ec"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\ui\\index.ts": {
+    "mtime": 1779360970.678544,
+    "ast_hash": "7fed68b8d033a942871a76cb2bc8d4f1",
+    "semantic_hash": "7fed68b8d033a942871a76cb2bc8d4f1"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\src\\ui\\user-panel.ts": {
+    "mtime": 1779483130.1943958,
+    "ast_hash": "cfff3689f6ca0ae966aae66fceafb54c",
+    "semantic_hash": "cfff3689f6ca0ae966aae66fceafb54c"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\tsconfig.json": {
+    "mtime": 1771096348.0742419,
+    "ast_hash": "3f60b58c436efc0eb70e6c9f953e5584",
+    "semantic_hash": "3f60b58c436efc0eb70e6c9f953e5584"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\vite.config.ts": {
+    "mtime": 1779257943.6029031,
+    "ast_hash": "191f63079edbbfbbb260a780298b6954",
+    "semantic_hash": "191f63079edbbfbbb260a780298b6954"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\.github\\workflows\\deploy.yml": {
+    "mtime": 1779253492.4933949,
+    "ast_hash": "af9ee8733a65a4e3d253ff032ba75816",
+    "semantic_hash": "af9ee8733a65a4e3d253ff032ba75816"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\CLAUDE.md": {
+    "mtime": 1779621634.2163281,
+    "ast_hash": "1089d40cef86af4514b0331206b8297c",
+    "semantic_hash": "1089d40cef86af4514b0331206b8297c"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\DISTRICTS.md": {
+    "mtime": 1779382162.3895836,
+    "ast_hash": "222ef324c14ea87d5905e7db3397f81a",
+    "semantic_hash": "222ef324c14ea87d5905e7db3397f81a"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\IDEAS.md": {
+    "mtime": 1779396281.998121,
+    "ast_hash": "1df4ed423d6c650115a89709a4025384",
+    "semantic_hash": "1df4ed423d6c650115a89709a4025384"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\index.html": {
+    "mtime": 1771096072.5141485,
+    "ast_hash": "26f233893954868f2746e4133d6decc9",
+    "semantic_hash": "26f233893954868f2746e4133d6decc9"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\performance-fix.md": {
+    "mtime": 1779559109.895695,
+    "ast_hash": "22ad9ccc61b8e38db3f29ec5cab6c7b3",
+    "semantic_hash": "22ad9ccc61b8e38db3f29ec5cab6c7b3"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\performance-plan-2.md": {
+    "mtime": 1779611631.2934535,
+    "ast_hash": "5a51b516e691a945068b068b32ba45d9",
+    "semantic_hash": "5a51b516e691a945068b068b32ba45d9"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\plans\\01-throttle-fps-display.md": {
+    "mtime": 1779427567.000219,
+    "ast_hash": "f6f7ec4805475e81f1b421cf62a78f39",
+    "semantic_hash": "f6f7ec4805475e81f1b421cf62a78f39"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\plans\\02-background-haze-fade.md": {
+    "mtime": 1779427581.5204308,
+    "ast_hash": "85013d70fbb0da4149ceb6b9f9cbe800",
+    "semantic_hash": "85013d70fbb0da4149ceb6b9f9cbe800"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\plans\\03-shuttle-district-targeting.md": {
+    "mtime": 1779427598.437237,
+    "ast_hash": "f1c62dcb9f906d451d8c26e9d3096112",
+    "semantic_hash": "f1c62dcb9f906d451d8c26e9d3096112"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\plans\\04-improved-car-behaviour.md": {
+    "mtime": 1779427617.5262558,
+    "ast_hash": "df12ede549ebfa886ce260ae0e3003e9",
+    "semantic_hash": "df12ede549ebfa886ce260ae0e3003e9"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\plans\\05-industrial-district.md": {
+    "mtime": 1779427641.4614818,
+    "ast_hash": "c0a6f2a35df178ee40ec031b2538d87e",
+    "semantic_hash": "c0a6f2a35df178ee40ec031b2538d87e"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\plans\\06-underground-rework.md": {
+    "mtime": 1779427670.7427108,
+    "ast_hash": "0a37bf93228db3b46519ea93ffb0212a",
+    "semantic_hash": "0a37bf93228db3b46519ea93ffb0212a"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\plans\\blend-district-plan.md": {
+    "mtime": 1779776511.6395266,
+    "ast_hash": "3bbe9068d3859e8b246b268606e523f9",
+    "semantic_hash": "3bbe9068d3859e8b246b268606e523f9"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\playground.html": {
+    "mtime": 1779195528.1146803,
+    "ast_hash": "fec7facf5f055b948782175106149e83",
+    "semantic_hash": "fec7facf5f055b948782175106149e83"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\README.md": {
+    "mtime": 1779298628.5833795,
+    "ast_hash": "6d04efd1dae7bd315db5692f7a79eb5b",
+    "semantic_hash": "6d04efd1dae7bd315db5692f7a79eb5b"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\task-01-extract-underground-city.md": {
+    "mtime": 1779278749.1404104,
+    "ast_hash": "b03bf2c8d80bf05bca8e683e0fbc851c",
+    "semantic_hash": "b03bf2c8d80bf05bca8e683e0fbc851c"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\task-02-extract-building-decorations.md": {
+    "mtime": 1779277874.4968474,
+    "ast_hash": "4ef1e9b4ce41b35c4f3b7ed529c64185",
+    "semantic_hash": "4ef1e9b4ce41b35c4f3b7ed529c64185"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\task-03-slice-context-type.md": {
+    "mtime": 1779277892.1979063,
+    "ast_hash": "abd700f817cf07deb30ca53e57959ce9",
+    "semantic_hash": "abd700f817cf07deb30ca53e57959ce9"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\task-04-shuttle-state-machine.md": {
+    "mtime": 1779277914.8512444,
+    "ast_hash": "c8a6ab266b3c9af2e07879ec5bf1b626",
+    "semantic_hash": "c8a6ab266b3c9af2e07879ec5bf1b626"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\task-05-shuttle-physics-config.md": {
+    "mtime": 1779277939.4955719,
+    "ast_hash": "aafab7984c08c938afc464100f3ae697",
+    "semantic_hash": "aafab7984c08c938afc464100f3ae697"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\task-06-debug-panel-dedup.md": {
+    "mtime": 1779277955.9141996,
+    "ast_hash": "9635d799746ef3b7b0a8ff7c2dcafbd0",
+    "semantic_hash": "9635d799746ef3b7b0a8ff7c2dcafbd0"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\refactor\\task-07-planet-stepworld.md": {
+    "mtime": 1779298631.5184398,
+    "ast_hash": "4127b6541a778361050b9c794206ca6d",
+    "semantic_hash": "4127b6541a778361050b9c794206ca6d"
+  },
+  "C:\\Users\\emiln\\code\\planet-perf\\task_plan.md": {
+    "mtime": 1779601984.6188538,
+    "ast_hash": "a401733299cd3a17d3f2cb05e5605319",
+    "semantic_hash": "a401733299cd3a17d3f2cb05e5605319"
+  }
+}
